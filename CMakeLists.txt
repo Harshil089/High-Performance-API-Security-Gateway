@@ -1,5 +1,10 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.25)
 project(APIGateway VERSION 1.0.0 LANGUAGES CXX)
+
+# Set policy for FetchContent timestamps
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
 
 # Set C++17 standard
 set(CMAKE_CXX_STANDARD 17)
@@ -24,18 +29,23 @@ FetchContent_Declare(
     GIT_TAG v0.15.3
 )
 
-# nlohmann/json for JSON parsing
+# nlohmann/json for JSON parsing - fetch first so jwt-cpp can find it
 FetchContent_Declare(
     json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG v3.11.3
 )
+FetchContent_MakeAvailable(json)
+
+# Make nlohmann_json available to jwt-cpp
+set(nlohmann_json_DIR ${json_BINARY_DIR})
 
 # jwt-cpp for JWT handling
+set(JWT_BUILD_EXAMPLES OFF)
 FetchContent_Declare(
     jwt-cpp
     GIT_REPOSITORY https://github.com/Thalhammer/jwt-cpp.git
-    GIT_TAG v0.7.0
+    GIT_TAG v0.6.0
 )
 
 # spdlog for logging
@@ -52,12 +62,16 @@ FetchContent_Declare(
     GIT_TAG v1.14.0
 )
 
-FetchContent_MakeAvailable(httplib json jwt-cpp spdlog googletest)
+FetchContent_MakeAvailable(httplib jwt-cpp spdlog googletest)
+
+# Get httplib source directory
+FetchContent_GetProperties(httplib)
 
 # Include directories
 include_directories(
     ${CMAKE_SOURCE_DIR}/src
     ${OPENSSL_INCLUDE_DIR}
+    ${httplib_SOURCE_DIR}
 )
 
 # Source files

@@ -129,6 +129,7 @@ private:
         int status,
         long response_time_ms,
         const std::string& user_id = "",
+        const std::string& backend = "",
         const std::string& error = ""
     );
 };

@@ -1,6 +1,7 @@
 #include "Logger.h"
 #include <iomanip>
 #include <sstream>
+#include <iostream>
 
 namespace gateway {
 

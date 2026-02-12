@@ -5,6 +5,7 @@
 #include <mutex>
 #include <chrono>
 #include <memory>
+#include <thread>
 
 namespace gateway {
 

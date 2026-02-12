@@ -108,11 +108,9 @@ JWTValidationResult JWTManager::validateToken(const std::string& token) {
 
         result.is_valid = true;
 
-    } catch (const jwt::token_verification_exception& e) {
+    } catch (const jwt::error::token_verification_exception& e) {
         result.error = "Token verification failed: ";
         result.error += e.what();
-    } catch (const jwt::token_expired_exception& e) {
-        result.error = "Token expired";
     } catch (const std::exception& e) {
         result.error = "Invalid token: ";
         result.error += e.what();

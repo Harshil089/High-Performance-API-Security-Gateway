@@ -1,5 +1,6 @@
 #include "HttpServer.h"
 #include "Response.h"
+#include "../router/ProxyManager.h"
 #include <uuid/uuid.h>
 #include <iostream>
 #include <chrono>

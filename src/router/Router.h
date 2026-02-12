@@ -5,6 +5,7 @@
 #include <memory>
 #include <regex>
 #include <optional>
+#include <map>
 
 namespace gateway {
 
