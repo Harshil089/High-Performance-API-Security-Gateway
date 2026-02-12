@@ -33,7 +33,7 @@ A production-grade, high-performance API Gateway built in C++ designed to handle
 ## Prerequisites
 
 - C++17 compatible compiler (GCC 9+, Clang 10+)
-- CMake 3.15+
+- CMake 3.25+
 - OpenSSL
 - Git
 

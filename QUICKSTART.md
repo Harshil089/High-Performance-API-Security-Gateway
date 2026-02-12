@@ -5,7 +5,7 @@ Get the API Gateway running in 5 minutes!
 ## Prerequisites
 
 - C++17 compatible compiler
-- CMake 3.15+
+- CMake 3.25+
 - OpenSSL
 - Node.js 14+ (for mock services)
 
