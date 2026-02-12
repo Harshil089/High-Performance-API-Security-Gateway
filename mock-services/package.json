@@ -1,0 +1,18 @@
+{
+  "name": "api-gateway-mock-services",
+  "version": "1.0.0",
+  "description": "Mock backend services for API Gateway testing",
+  "main": "auth-service.js",
+  "scripts": {
+    "auth": "node auth-service.js",
+    "user": "node user-service.js",
+    "payment": "node payment-service.js",
+    "all": "npm run auth & npm run user & npm run payment"
+  },
+  "keywords": ["mock", "api", "testing"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

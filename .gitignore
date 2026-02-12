@@ -1,0 +1,39 @@
+# Build artifacts
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+api-gateway
+gateway-tests
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Config with secrets
+config/secrets.json
+*.pem
+*.key
+*.crt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+_deps/
+
+# Coverage
+*.gcov
+*.gcda
+*.gcno
+coverage/
