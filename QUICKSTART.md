@@ -50,6 +50,7 @@ curl http://localhost:8080/health
 ```
 
 Expected response:
+
 ```json
 {"status":"healthy","service":"api-gateway"}
 ```
@@ -63,6 +64,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 ```
 
 Response:
+
 ```json
 {
   "token": "eyJhbGc...",
@@ -75,14 +77,23 @@ Response:
 ### Access Protected Endpoint
 
 ```bash
-# Save the token from previous response
-TOKEN="your_jwt_token_here"
+# Capture the token automatically from the login response
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"secret"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 
+# List all users
 curl http://localhost:8080/api/users \
+  -H "Authorization: Bearer $TOKEN"
+
+# Get a specific user
+curl http://localhost:8080/api/users/1 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-Response:
+Response (list all users):
+
 ```json
 {
   "users": [
@@ -108,6 +119,7 @@ done
 ```
 
 After 5 requests, you'll see:
+
 ```json
 {
   "error": "Rate limit exceeded"
@@ -178,6 +190,7 @@ export JWT_SECRET="your-secret-key-min-32-chars"
 ## Default Credentials
 
 For mock services:
+
 - Username: `admin`
 - Password: `secret`
 

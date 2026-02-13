@@ -94,7 +94,14 @@ std::regex Router::patternToRegex(const std::string& pattern) {
         }
     }
 
-    // Convert * to .*
+    // Convert trailing /* to optional match: (/.*)?
+    // This allows /api/users/* to match both /api/users and /api/users/123
+    if (regex_pattern.size() >= 2 &&
+        regex_pattern.substr(regex_pattern.size() - 2) == "/*") {
+        regex_pattern = regex_pattern.substr(0, regex_pattern.size() - 2) + "(/.*)?";
+    }
+
+    // Convert remaining * to .*
     size_t pos = 0;
     while ((pos = regex_pattern.find("*", pos)) != std::string::npos) {
         regex_pattern.replace(pos, 1, ".*");
