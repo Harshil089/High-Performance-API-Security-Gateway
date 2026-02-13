@@ -72,6 +72,12 @@ public:
      */
     void enableTLS(const std::string& cert_file, const std::string& key_file);
 
+    /**
+     * @brief Set security headers configuration
+     * @param headers Map of security headers to add to responses
+     */
+    void setSecurityHeaders(const std::map<std::string, std::string>& headers);
+
 private:
     std::string host_;
     int port_;
@@ -88,10 +94,17 @@ private:
     std::string cert_file_;
     std::string key_file_;
 
+    std::map<std::string, std::string> security_headers_;
+
     /**
      * @brief Setup request handlers
      */
     void setupHandlers();
+
+    /**
+     * @brief Add security headers to response
+     */
+    void addSecurityHeaders(httplib::Response& res);
 
     /**
      * @brief Main request handler

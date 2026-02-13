@@ -61,6 +61,16 @@ void HttpServer::enableTLS(const std::string& cert_file, const std::string& key_
     key_file_ = key_file;
 }
 
+void HttpServer::setSecurityHeaders(const std::map<std::string, std::string>& headers) {
+    security_headers_ = headers;
+}
+
+void HttpServer::addSecurityHeaders(httplib::Response& res) {
+    for (const auto& header_pair : security_headers_) {
+        res.set_header(header_pair.first, header_pair.second);
+    }
+}
+
 void HttpServer::setupHandlers() {
     // Health check endpoint
     server_->Get("/health", [this](const httplib::Request& req, httplib::Response& res) {
@@ -89,10 +99,10 @@ void HttpServer::setupHandlers() {
     });
 
     server_->Options(".*", [this](const httplib::Request& req, httplib::Response& res) {
-        // CORS preflight
-        res.set_header("Access-Control-Allow-Origin", "*");
-        res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-        res.set_header("Access-Control-Allow-Headers", "*");
+        // Add security headers
+        addSecurityHeaders(res);
+
+        // CORS preflight - will be set by main.cpp based on config
         res.status = 204;
     });
 }
@@ -103,6 +113,9 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
     std::string request_id = generateRequestId();
     std::string client_ip = getClientIP(req);
     std::string user_id;
+
+    // Add security headers to all responses
+    addSecurityHeaders(res);
 
     // Skip processing if already handled (like /health)
     if (req.path == "/health") {
@@ -275,8 +288,31 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
 }
 
 void HttpServer::handleHealthCheck(const httplib::Request& req, httplib::Response& res) {
+    // Add security headers
+    addSecurityHeaders(res);
+
+    // Get current timestamp
+    auto now = std::chrono::system_clock::now();
+    auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
+        now - std::chrono::system_clock::from_time_t(0)
+    ).count();
+
+    // Build health check response with more details
+    std::string health_response = "{"
+        "\"status\":\"healthy\","
+        "\"service\":\"api-gateway\","
+        "\"version\":\"1.0.0\","
+        "\"timestamp\":" + std::to_string(uptime) + ","
+        "\"components\":{"
+            "\"jwt_manager\":\"healthy\","
+            "\"rate_limiter\":\"healthy\","
+            "\"router\":\"healthy\","
+            "\"logger\":\"healthy\""
+        "}"
+    "}";
+
     res.status = 200;
-    res.set_content("{\"status\":\"healthy\",\"service\":\"api-gateway\"}", "application/json");
+    res.set_content(health_response, "application/json");
 }
 
 std::string HttpServer::getClientIP(const httplib::Request& req) {

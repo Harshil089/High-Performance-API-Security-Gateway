@@ -24,6 +24,9 @@ config/secrets.json
 *.pem
 *.key
 *.crt
+.env
+.env.local
+.env.production
 
 # OS
 .DS_Store

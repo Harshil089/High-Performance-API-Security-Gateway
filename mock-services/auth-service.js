@@ -6,15 +6,37 @@ const PORT = 3001;
 app.use(express.json());
 
 // JWT configuration - must match gateway configuration
-const JWT_SECRET = process.env.JWT_SECRET || 'test-secret-key-min-32-characters-long';
-const JWT_ISSUER = 'api-gateway';
-const JWT_AUDIENCE = 'api-clients';
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_ISSUER = process.env.JWT_ISSUER || 'api-gateway';
+const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'api-clients';
 
-// Mock user database
-const users = {
-    'admin': { password: 'secret', id: 'user_001', role: 'admin' },
-    'user': { password: 'password', id: 'user_002', role: 'user' }
-};
+// Validate required environment variables
+if (!JWT_SECRET) {
+    console.error('ERROR: JWT_SECRET environment variable is required');
+    console.error('Set it with: export JWT_SECRET="your-secure-secret-key-min-32-chars"');
+    process.exit(1);
+}
+
+if (JWT_SECRET.length < 32) {
+    console.error('ERROR: JWT_SECRET must be at least 32 characters long');
+    process.exit(1);
+}
+
+// Mock user database - in production, use proper user management system
+// Credentials should be loaded from environment or secure secret store
+const users = JSON.parse(process.env.AUTH_USERS || '{}');
+
+// Fallback to demo users only in development mode
+if (Object.keys(users).length === 0 && process.env.NODE_ENV === 'development') {
+    console.warn('WARNING: Using demo credentials - NOT FOR PRODUCTION');
+    Object.assign(users, {
+        'demo_admin': { password: process.env.DEMO_ADMIN_PASSWORD || 'change-me-admin', id: 'user_001', role: 'admin' },
+        'demo_user': { password: process.env.DEMO_USER_PASSWORD || 'change-me-user', id: 'user_002', role: 'user' }
+    });
+} else if (Object.keys(users).length === 0) {
+    console.error('ERROR: No users configured. Set AUTH_USERS environment variable');
+    process.exit(1);
+}
 
 // Health check
 app.get('/health', (req, res) => {

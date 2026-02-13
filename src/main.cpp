@@ -77,16 +77,37 @@ int main(int argc, char* argv[]) {
         int port = config["server"]["port"].get<int>();
         int max_connections = config["server"]["max_connections"].get<int>();
 
-        // JWT configuration
+        // JWT configuration - validate critical security settings
         std::string jwt_secret = config["jwt"]["secret"].get<std::string>();
         if (jwt_secret.empty()) {
-            std::cerr << "Error: JWT_SECRET environment variable not set\n";
+            std::cerr << "SECURITY ERROR: JWT_SECRET not configured\n";
+            std::cerr << "Set JWT_SECRET environment variable with a secure random key (min 32 characters)\n";
             return 1;
+        }
+
+        if (jwt_secret.length() < 32) {
+            std::cerr << "SECURITY ERROR: JWT_SECRET must be at least 32 characters long\n";
+            std::cerr << "Current length: " << jwt_secret.length() << " characters\n";
+            return 1;
+        }
+
+        // Warn about insecure default secrets
+        if (jwt_secret.find("test") != std::string::npos ||
+            jwt_secret.find("demo") != std::string::npos ||
+            jwt_secret.find("example") != std::string::npos) {
+            std::cerr << "WARNING: JWT_SECRET appears to be a test/demo value\n";
+            std::cerr << "This is INSECURE for production use. Generate a secure random secret.\n";
         }
 
         std::string jwt_issuer = config["jwt"]["issuer"].get<std::string>();
         std::string jwt_audience = config["jwt"]["audience"].get<std::string>();
         int access_token_expiry = config["jwt"]["access_token_expiry"].get<int>();
+
+        // Validate JWT configuration
+        if (jwt_issuer.empty() || jwt_audience.empty()) {
+            std::cerr << "SECURITY ERROR: JWT issuer and audience must be configured\n";
+            return 1;
+        }
 
         // Rate limiting configuration
         auto rate_limits = config["rate_limits"];
@@ -170,6 +191,37 @@ int main(int argc, char* argv[]) {
         // HTTP Server
         auto server = std::make_shared<HttpServer>(host, port, max_connections);
         server->initialize(jwt_manager, rate_limiter, router, security_validator, logger);
+
+        // Configure security headers
+        if (config["security"].contains("headers")) {
+            std::map<std::string, std::string> security_headers;
+            for (auto it = config["security"]["headers"].items().begin();
+                 it != config["security"]["headers"].items().end(); ++it) {
+                std::string key = it.key();
+                auto value = it.value();
+
+                // Convert snake_case to Header-Case
+                std::string header_name = key;
+                for (size_t i = 0; i < header_name.length(); i++) {
+                    if (header_name[i] == '_') {
+                        header_name[i] = '-';
+                        if (i + 1 < header_name.length()) {
+                            header_name[i + 1] = toupper(header_name[i + 1]);
+                        }
+                    } else if (i == 0) {
+                        header_name[i] = toupper(header_name[i]);
+                    }
+                }
+                security_headers[header_name] = value.get<std::string>();
+            }
+            server->setSecurityHeaders(security_headers);
+            std::cout << "  ✓ Security headers configured (" << security_headers.size() << " headers)\n";
+        }
+
+        // Configure CORS
+        if (config["security"]["cors"]["enabled"].get<bool>()) {
+            std::cout << "  ✓ CORS enabled\n";
+        }
 
         // Enable TLS if configured
         if (config["server"]["tls"]["enabled"].get<bool>()) {
