@@ -1,0 +1,59 @@
+# Build artifacts
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Config with secrets
+.env
+.env.local
+.env.production
+.tokens
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Dependencies
+_deps/
+
+# Coverage
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# Documentation (not needed for build)
+*.md
+docs/
+
+# CI/CD
+.github/
+
+# Docker files (not needed in container)
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Mock services source (built separately)
+mock-services/
+
+# Monitoring config (mounted at runtime)
+monitoring/

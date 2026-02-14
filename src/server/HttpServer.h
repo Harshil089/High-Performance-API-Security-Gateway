@@ -10,6 +10,7 @@
 #include "../router/Router.h"
 #include "../security/SecurityValidator.h"
 #include "../logging/Logger.h"
+#include "../metrics/SimpleMetrics.h"
 
 namespace gateway {
 
@@ -89,6 +90,7 @@ private:
     std::shared_ptr<Router> router_;
     std::shared_ptr<SecurityValidator> security_validator_;
     std::shared_ptr<Logger> logger_;
+    std::shared_ptr<SimpleMetrics> metrics_;
 
     bool tls_enabled_;
     std::string cert_file_;
@@ -115,6 +117,11 @@ private:
      * @brief Health check endpoint handler
      */
     void handleHealthCheck(const httplib::Request& req, httplib::Response& res);
+
+    /**
+     * @brief Metrics endpoint handler
+     */
+    void handleMetrics(const httplib::Request& req, httplib::Response& res);
 
     /**
      * @brief Extract client IP from request

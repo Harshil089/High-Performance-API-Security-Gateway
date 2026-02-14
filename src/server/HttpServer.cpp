@@ -12,6 +12,7 @@ HttpServer::HttpServer(const std::string& host, int port, int max_connections)
     , port_(port)
     , max_connections_(max_connections)
     , server_(new httplib::Server())
+    , metrics_(std::make_shared<SimpleMetrics>())
     , tls_enabled_(false) {}
 
 HttpServer::~HttpServer() {
@@ -77,6 +78,11 @@ void HttpServer::setupHandlers() {
         handleHealthCheck(req, res);
     });
 
+    // Metrics endpoint (Prometheus format)
+    server_->Get("/metrics", [this](const httplib::Request& req, httplib::Response& res) {
+        handleMetrics(req, res);
+    });
+
     // Catch-all handler for all other requests
     server_->Get(".*", [this](const httplib::Request& req, httplib::Response& res) {
         handleRequest(req, res);
@@ -117,8 +123,8 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
     // Add security headers to all responses
     addSecurityHeaders(res);
 
-    // Skip processing if already handled (like /health)
-    if (req.path == "/health") {
+    // Skip processing if already handled (like /health, /metrics)
+    if (req.path == "/health" || req.path == "/metrics") {
         return;
     }
 
@@ -195,6 +201,7 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
     // Check rate limiting
     auto [allowed, retry_after] = rate_limiter_->allowRequest(client_ip, req.path);
     if (!allowed) {
+        metrics_->incrementRateLimitHits();
         res.status = StatusCode::TOO_MANY_REQUESTS;
         res.set_header("Retry-After", std::to_string(retry_after));
         res.set_content(ResponseBuilder::errorJson("Rate limit exceeded"), "application/json");
@@ -204,10 +211,12 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
             end_time - start_time
         ).count();
 
+        metrics_->incrementRequests(req.method, req.path, res.status);
         logRequest(request_id, client_ip, req.method, req.path, res.status,
                   response_time, user_id, "", "Rate limit exceeded");
         return;
     }
+    metrics_->incrementRateLimitAllowed();
 
     // Match route
     auto route_match = router_->matchRoute(req.path);
@@ -230,6 +239,7 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
     // Check authentication if required
     if (match.route->require_auth) {
         if (!validateAuth(req, user_id)) {
+            metrics_->incrementAuthFailure();
             res.status = StatusCode::UNAUTHORIZED;
             res.set_content(ResponseBuilder::errorJson("Unauthorized"), "application/json");
 
@@ -238,10 +248,12 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
                 end_time - start_time
             ).count();
 
+            metrics_->incrementRequests(req.method, req.path, res.status);
             logRequest(request_id, client_ip, req.method, req.path, res.status,
                       response_time, user_id, "", "Unauthorized");
             return;
         }
+        metrics_->incrementAuthSuccess();
     }
 
     // Forward request to backend
@@ -274,13 +286,18 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
         res.status = StatusCode::BAD_GATEWAY;
         res.set_content(ResponseBuilder::errorJson("Backend error: " + proxy_response.error),
                        "application/json");
+        metrics_->incrementBackendErrors(match.backend_url);
     }
 
-    // Log request
+    // Log request and record metrics
     auto end_time = std::chrono::steady_clock::now();
     auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(
         end_time - start_time
     ).count();
+
+    metrics_->incrementRequests(req.method, req.path, res.status);
+    metrics_->recordRequestDuration(req.method, static_cast<double>(response_time));
+    metrics_->recordBackendLatency(match.backend_url, static_cast<double>(response_time));
 
     logRequest(request_id, client_ip, req.method, req.path, res.status,
               response_time, user_id, match.backend_url,
@@ -313,6 +330,11 @@ void HttpServer::handleHealthCheck(const httplib::Request& req, httplib::Respons
 
     res.status = 200;
     res.set_content(health_response, "application/json");
+}
+
+void HttpServer::handleMetrics(const httplib::Request& req, httplib::Response& res) {
+    res.status = 200;
+    res.set_content(metrics_->exportMetrics(), "text/plain; version=0.0.4; charset=utf-8");
 }
 
 std::string HttpServer::getClientIP(const httplib::Request& req) {

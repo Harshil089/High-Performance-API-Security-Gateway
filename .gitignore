@@ -27,6 +27,7 @@ config/secrets.json
 .env
 .env.local
 .env.production
+.tokens
 
 # OS
 .DS_Store

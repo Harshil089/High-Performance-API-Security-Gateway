@@ -19,6 +19,12 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -fsanitize=address -f
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 
+# Find UUID library
+find_library(UUID_LIBRARY uuid REQUIRED)
+if(NOT UUID_LIBRARY)
+    message(FATAL_ERROR "UUID library not found")
+endif()
+
 # External dependencies via FetchContent
 include(FetchContent)
 
@@ -102,6 +108,7 @@ target_link_libraries(api-gateway
         nlohmann_json::nlohmann_json
         jwt-cpp::jwt-cpp
         spdlog::spdlog
+        ${UUID_LIBRARY}
 )
 
 # Enable testing

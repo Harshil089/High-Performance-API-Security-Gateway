@@ -1,73 +1,194 @@
 version: '3.8'
 
 services:
-  api-gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: api-gateway
+  # Redis for distributed rate limiting and caching
+  redis:
+    image: redis:7-alpine
+    container_name: api-gateway-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-gateway-redis-pass}
     ports:
-      - "8080:8080"
-    environment:
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_ISSUER=${JWT_ISSUER:-api-gateway}
-      - JWT_AUDIENCE=${JWT_AUDIENCE:-api-clients}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      - "6379:6379"
     volumes:
-      - ./config:/etc/api-gateway:ro
-      - ./logs:/var/log/api-gateway
-      - ./certs:/etc/api-gateway/certs:ro
-    restart: unless-stopped
+      - redis-data:/data
     networks:
       - gateway-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-gateway-redis-pass}", "ping"]
+      interval: 10s
       timeout: 3s
       retries: 3
-      start_period: 10s
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp
+    restart: unless-stopped
 
-  # Mock backend services for testing
+  # Mock Auth Service (for testing)
   auth-service:
     build:
       context: ./mock-services
       dockerfile: Dockerfile
-    container_name: auth-service
-    ports:
-      - "3001:3001"
+    container_name: api-gateway-auth
     environment:
+      - PORT=3001
+      - NODE_ENV=${NODE_ENV:-development}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_ISSUER=${JWT_ISSUER:-api-gateway}
       - JWT_AUDIENCE=${JWT_AUDIENCE:-api-clients}
-      - NODE_ENV=${NODE_ENV:-development}
       - DEMO_ADMIN_PASSWORD=${DEMO_ADMIN_PASSWORD:-change-me-admin}
       - DEMO_USER_PASSWORD=${DEMO_USER_PASSWORD:-change-me-user}
+    ports:
+      - "3001:3001"
     networks:
       - gateway-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     restart: unless-stopped
+    command: node auth-service.js
 
+  # Mock User Service (for testing)
   user-service:
     build:
       context: ./mock-services
       dockerfile: Dockerfile
-    container_name: user-service
+    container_name: api-gateway-users
+    environment:
+      - PORT=3002
+      - NODE_ENV=${NODE_ENV:-development}
     ports:
       - "3002:3002"
-    environment:
-      - NODE_ENV=${NODE_ENV:-development}
     networks:
       - gateway-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     restart: unless-stopped
     command: node user-service.js
+
+  # API Gateway (main service)
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_TYPE=Release
+    container_name: api-gateway
+    environment:
+      # Core configuration
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ISSUER=${JWT_ISSUER:-api-gateway}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:-api-clients}
+      - GATEWAY_PORT=${GATEWAY_PORT:-8080}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+
+      # Redis configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-gateway-redis-pass}
+      - REDIS_DB=0
+
+      # Admin API configuration
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - ADMIN_ENABLED=${ADMIN_ENABLED:-true}
+
+      # Metrics configuration
+      - METRICS_ENABLED=${METRICS_ENABLED:-true}
+      - METRICS_PORT=${METRICS_PORT:-9090}
+
+      # Cache configuration
+      - CACHE_ENABLED=${CACHE_ENABLED:-true}
+      - CACHE_DEFAULT_TTL=${CACHE_DEFAULT_TTL:-300}
+
+      # WebSocket configuration
+      - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED:-true}
+      - WEBSOCKET_MAX_CONNECTIONS=${WEBSOCKET_MAX_CONNECTIONS:-100}
+
+      # Demo credentials
+      - DEMO_ADMIN_PASSWORD=${DEMO_ADMIN_PASSWORD:-change-me-admin}
+      - DEMO_USER_PASSWORD=${DEMO_USER_PASSWORD:-change-me-user}
+    ports:
+      - "8080:8080"   # Main gateway port (also serves /metrics)
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./certs:/app/certs:ro
+    networks:
+      - gateway-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # Prometheus (optional - for monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: api-gateway-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - gateway-network
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana (optional - for visualization)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: api-gateway-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - gateway-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
 
 networks:
   gateway-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
   gateway-logs:
+    driver: local

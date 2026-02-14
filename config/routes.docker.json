@@ -1,0 +1,27 @@
+{
+  "routes": [
+    {
+      "path": "/api/auth/*",
+      "backend": "http://auth-service:3001",
+      "rewrite": "/*",
+      "timeout": 5000,
+      "require_auth": false,
+      "strip_prefix": "/api/auth"
+    },
+    {
+      "path": "/api/users/*",
+      "backends": [
+        "http://user-service:3002"
+      ],
+      "load_balancing": "round_robin",
+      "timeout": 3000,
+      "require_auth": true,
+      "strip_prefix": "/api"
+    },
+    {
+      "path": "/health",
+      "handler": "health_check",
+      "require_auth": false
+    }
+  ]
+}
