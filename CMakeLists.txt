@@ -82,10 +82,13 @@ set(GATEWAY_SOURCES
     src/rate_limiter/RateLimiter.cpp
     src/router/Router.cpp
     src/router/ProxyManager.cpp
+    src/router/WebSocketProxy.cpp
     src/security/SecurityValidator.cpp
     src/security/TLSManager.cpp
     src/logging/Logger.cpp
     src/config/ConfigManager.cpp
+    src/admin/AdminAPI.cpp
+    src/metrics/SimpleMetrics.cpp
 )
 
 # Main executable

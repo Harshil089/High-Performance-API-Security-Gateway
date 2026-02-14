@@ -75,5 +75,38 @@
       "recovery_timeout": 60,
       "half_open_requests": 3
     }
+  },
+  "redis": {
+    "enabled": false,
+    "uri": "tcp://127.0.0.1:6379",
+    "password": "${REDIS_PASSWORD}",
+    "db": 0,
+    "connection_pool_size": 10
+  },
+  "cache": {
+    "enabled": false,
+    "backend": "redis",
+    "default_ttl": 300,
+    "max_entry_size": 1048576,
+    "cacheable_methods": ["GET"],
+    "cacheable_status_codes": [200, 301, 302, 404],
+    "exclude_paths": ["/api/auth/*", "/admin/*"],
+    "cache_control_respect": true
+  },
+  "metrics": {
+    "enabled": true,
+    "port": 9090,
+    "path": "/metrics"
+  },
+  "admin": {
+    "enabled": false,
+    "token": "${ADMIN_TOKEN}",
+    "allowed_ips": ["127.0.0.1"]
+  },
+  "websocket": {
+    "enabled": false,
+    "max_connections": 100,
+    "ping_interval": 30,
+    "ping_timeout": 10
   }
 }

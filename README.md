@@ -665,13 +665,17 @@ For more troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (if exist
 
 ### Roadmap
 
-- [ ] Redis integration for distributed rate limiting
-- [ ] Prometheus metrics export
-- [ ] OpenTelemetry tracing
-- [ ] Response caching with TTL
+#### Completed Features ✅
+- [x] **Prometheus metrics export** - Built-in metrics collector exposing metrics on port 9090
+- [x] **WebSocket proxying** - Support for WebSocket upgrade and proxying
+- [x] **Admin API for runtime config** updates - REST API for managing gateway at `/admin/*`
+- [x] **Response caching (in-memory)** - Simple metrics and caching without external dependencies
+
+#### Planned Features
+- [ ] Redis integration for distributed rate limiting (code ready, needs Redis server)
+- [ ] Redis-backed response caching (code ready, needs Redis server)
+- [ ] OpenTelemetry distributed tracing
 - [ ] GraphQL support
-- [ ] WebSocket proxying
-- [ ] Admin API for runtime config updates
 - [ ] OAuth2 integration
 - [ ] SAML support
 
