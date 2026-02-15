@@ -113,6 +113,30 @@ Click "Security" from the dashboard to access three security management tabs:
 - **Visual Indicators**: Green for allowed, red for blocked
 - **Examples**: 192.168.1.1 (single IP), 10.0.0.0/24 (CIDR range), ::1 (IPv6)
 
+### Cache Management (`/cache`)
+
+Click "Cache" from the dashboard to access three cache management tabs:
+
+**Statistics:**
+- **6 Metrics Cards**: Total entries, cache hits, cache misses, hit rate %, memory usage, evictions
+- **Hit vs Miss Chart**: Donut chart visualizing cache hit/miss distribution
+- Auto-refreshes every 10 seconds
+
+**Configuration:**
+- **Enable/Disable**: Toggle caching globally
+- **Backend**: Choose between Redis or In-Memory
+- **Default TTL**: Set cache expiry with human-readable duration display
+- **Max Entry Size**: With formatted byte display
+- **Cacheable Methods**: Select which HTTP methods to cache (GET, HEAD, etc.)
+- **Cacheable Status Codes**: Tag-based management with quick-add buttons
+- **Exclude Paths**: Add path patterns to bypass caching
+- **Cache-Control Respect**: Honor backend Cache-Control headers
+
+**Clear Cache:**
+- **Clear All**: Remove all cached entries with safety confirmation dialog
+- **Clear by Pattern**: Target specific entries using Redis glob syntax
+- **Pattern Examples**: `cache:GET:/api/users/*`, `cache:*:/api/products/*`
+
 ### Real-Time Updates
 
 Metrics and charts automatically refresh every 5 seconds. No manual refresh needed!
@@ -196,7 +220,8 @@ Once the UI is running:
 4. **Track Auth Success** - Monitor security
 5. **Manage Routes** - Add/edit/delete API routes visually
 6. **Configure Security** - Set up JWT, API keys, and IP filtering
-7. **Explore Features** - Try all three implemented pages (Dashboard, Routes, Security)
+7. **Manage Cache** - Monitor stats, configure rules, and clear entries
+8. **Explore Features** - Try all four implemented pages (Dashboard, Routes, Security, Cache)
 
 ## 🔒 Security Notes
 
