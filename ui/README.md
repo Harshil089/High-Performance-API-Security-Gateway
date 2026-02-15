@@ -4,7 +4,7 @@ A modern, production-ready admin interface for the High-Performance API Security
 
 ## Features
 
-### ✅ Implemented (Phase 1, 2, 3 & 4)
+### ✅ Implemented (Phase 1–5)
 
 - **Real-time Dashboard** - Monitor gateway metrics with auto-refresh (every 5s)
   - 8 key metrics cards: Total requests, active connections, auth success rate, cache hit rate, status codes, backend health
@@ -33,9 +33,20 @@ A modern, production-ready admin interface for the High-Performance API Security
   - **Configuration**: Enable/disable, backend selection, TTL, cacheable methods/status codes, exclude paths
   - **Clear Cache**: Clear all with confirmation, or clear by Redis glob pattern
 
+- **Rate Limiting** (`/ratelimit`) - Request rate limit configuration
+  - **Global/Per-IP Limits**: Configure requests, time windows, max connections
+  - **Endpoint Rules**: Add per-endpoint overrides
+  - **Reset**: Reset rate limit counters by client IP
+
+- **Request Logs** (`/logs`) - Endpoint traffic viewer
+  - Sortable table with total requests, 2xx/4xx/5xx counts, error rate
+  - Search filter and auto-refresh
+
+- **Settings** (`/settings`) - Full configuration editor
+  - Monaco JSON editor with syntax highlighting
+  - Live validation, read-only toggle, save/reset
+
 ### 🚧 Planned (Future Phases)
-- **Rate Limiting** - Configure and monitor rate limits
-- **Config Editor** - Monaco-based JSON editor with diff view
 
 ## Technology Stack
 
@@ -104,7 +115,9 @@ Browser → Next.js API Route (adds token) → Gateway Admin API
 - `/api/cache/stats` - Get cache statistics
 - `/api/cache/clear` - Clear cache
 - `/api/cache/config` - Get/update cache configuration
+- `/api/ratelimit/config` - Get/update rate limit configuration
 - `/api/ratelimit/reset` - Reset rate limit for a key
+- `/api/logs` - Get per-endpoint request metrics
 - `/api/metrics` - Get Prometheus metrics (public, no auth)
 
 ### Auto-refresh
@@ -123,6 +136,9 @@ ui/
 │   ├── components/       # React components
 │   │   ├── cache/        # Cache management components
 │   │   ├── dashboard/    # Dashboard components
+│   │   ├── logs/         # Request logs components
+│   │   ├── ratelimit/    # Rate limiting components
+│   │   ├── settings/     # Config editor components
 │   │   ├── ui/           # Shadcn UI components
 │   │   └── providers/    # Context providers
 │   ├── lib/              # Utilities and helpers

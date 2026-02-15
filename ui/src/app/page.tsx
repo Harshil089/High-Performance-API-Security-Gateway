@@ -6,7 +6,7 @@ import { StatusCodeChart } from "@/components/dashboard/StatusCodeChart";
 import { BackendHealthChart } from "@/components/dashboard/BackendHealthChart";
 import { useMetrics } from "@/lib/hooks/useMetrics";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity, Shield, Database, Settings } from "lucide-react";
+import { Activity, Shield, Database, Settings, Gauge, FileText } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardPage() {
@@ -67,6 +67,18 @@ export default function DashboardPage() {
           description="Gateway configuration"
           icon={Settings}
           href="/settings"
+        />
+        <QuickActionCard
+          title="Rate Limiting"
+          description="Configure request rate limits"
+          icon={Gauge}
+          href="/ratelimit"
+        />
+        <QuickActionCard
+          title="Request Logs"
+          description="Endpoint traffic and errors"
+          icon={FileText}
+          href="/logs"
         />
       </div>
 
