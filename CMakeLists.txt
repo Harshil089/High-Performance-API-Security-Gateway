@@ -25,6 +25,20 @@ if(NOT UUID_LIBRARY)
     message(FATAL_ERROR "UUID library not found")
 endif()
 
+# Find hiredis and redis-plus-plus (installed via Dockerfile)
+find_library(HIREDIS_LIBRARY hiredis)
+find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
+find_library(REDIS_PLUS_PLUS_LIBRARY redis++ PATHS /usr/local/lib)
+find_path(REDIS_PLUS_PLUS_INCLUDE_DIR sw/redis++/redis++.h PATHS /usr/local/include)
+
+if(HIREDIS_LIBRARY AND REDIS_PLUS_PLUS_LIBRARY)
+    set(REDIS_AVAILABLE ON)
+    message(STATUS "Redis support enabled (hiredis + redis-plus-plus found)")
+else()
+    set(REDIS_AVAILABLE OFF)
+    message(STATUS "Redis support disabled (hiredis or redis-plus-plus not found)")
+endif()
+
 # External dependencies via FetchContent
 include(FetchContent)
 
@@ -97,8 +111,21 @@ set(GATEWAY_SOURCES
     src/metrics/SimpleMetrics.cpp
 )
 
+# Add Redis source files if available
+if(REDIS_AVAILABLE)
+    list(APPEND GATEWAY_SOURCES
+        src/cache/RedisCache.cpp
+        src/rate_limiter/RedisRateLimiter.cpp
+    )
+endif()
+
 # Main executable
 add_executable(api-gateway ${GATEWAY_SOURCES})
+
+if(REDIS_AVAILABLE)
+    target_compile_definitions(api-gateway PRIVATE REDIS_AVAILABLE=1)
+    target_include_directories(api-gateway PRIVATE ${HIREDIS_INCLUDE_DIR} ${REDIS_PLUS_PLUS_INCLUDE_DIR})
+endif()
 
 target_link_libraries(api-gateway
     PRIVATE
@@ -110,6 +137,10 @@ target_link_libraries(api-gateway
         spdlog::spdlog
         ${UUID_LIBRARY}
 )
+
+if(REDIS_AVAILABLE)
+    target_link_libraries(api-gateway PRIVATE ${HIREDIS_LIBRARY} ${REDIS_PLUS_PLUS_LIBRARY})
+endif()
 
 # Enable testing
 enable_testing()

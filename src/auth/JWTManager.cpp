@@ -8,16 +8,26 @@ JWTManager::JWTManager(
     const std::string& secret,
     const std::string& issuer,
     const std::string& audience,
-    Algorithm algorithm
+    Algorithm algorithm,
+    const std::string& public_key_pem,
+    const std::string& private_key_pem
 ) : secret_(secret)
   , issuer_(issuer)
   , audience_(audience)
-  , algorithm_(algorithm) {
-    if (secret_.empty()) {
-        throw std::invalid_argument("JWT secret cannot be empty");
-    }
-    if (secret_.size() < 32 && algorithm == Algorithm::HS256) {
-        std::cerr << "Warning: JWT secret should be at least 32 bytes for HS256\n";
+  , algorithm_(algorithm)
+  , public_key_pem_(public_key_pem)
+  , private_key_pem_(private_key_pem) {
+    if (algorithm == Algorithm::HS256) {
+        if (secret_.empty()) {
+            throw std::invalid_argument("JWT secret cannot be empty for HS256");
+        }
+        if (secret_.size() < 32) {
+            std::cerr << "Warning: JWT secret should be at least 32 bytes for HS256\n";
+        }
+    } else if (algorithm == Algorithm::RS256) {
+        if (public_key_pem_.empty()) {
+            throw std::invalid_argument("RS256 requires a public key PEM");
+        }
     }
 }
 
@@ -46,8 +56,11 @@ std::string JWTManager::generateToken(
         if (algorithm_ == Algorithm::HS256) {
             return token.sign(jwt::algorithm::hs256{secret_});
         } else {
-            // RS256 would require private key
-            throw std::runtime_error("RS256 not yet implemented");
+            // RS256 signing requires private key
+            if (private_key_pem_.empty()) {
+                throw std::runtime_error("RS256 signing requires a private key");
+            }
+            return token.sign(jwt::algorithm::rs256(public_key_pem_, private_key_pem_, "", ""));
         }
     } catch (const std::exception& e) {
         std::cerr << "Error generating JWT token: " << e.what() << "\n";
@@ -68,14 +81,20 @@ JWTValidationResult JWTManager::validateToken(const std::string& token) {
         // Decode and verify token
         auto decoded = jwt::decode(token);
 
-        // Create verifier
-        auto verifier = jwt::verify()
-            .allow_algorithm(jwt::algorithm::hs256{secret_})
-            .with_issuer(issuer_)
-            .with_audience(audience_);
-
-        // Verify signature and claims
-        verifier.verify(decoded);
+        // Create verifier based on algorithm
+        if (algorithm_ == Algorithm::RS256) {
+            auto verifier = jwt::verify()
+                .allow_algorithm(jwt::algorithm::rs256(public_key_pem_, "", "", ""))
+                .with_issuer(issuer_)
+                .with_audience(audience_);
+            verifier.verify(decoded);
+        } else {
+            auto verifier = jwt::verify()
+                .allow_algorithm(jwt::algorithm::hs256{secret_})
+                .with_issuer(issuer_)
+                .with_audience(audience_);
+            verifier.verify(decoded);
+        }
 
         // Extract claims
         result.claims.user_id = decoded.get_subject();
@@ -144,9 +163,15 @@ std::optional<JWTClaims> JWTManager::extractClaims(const std::string& token) {
 bool JWTManager::verifySignature(const std::string& token) {
     try {
         auto decoded = jwt::decode(token);
-        auto verifier = jwt::verify()
-            .allow_algorithm(jwt::algorithm::hs256{secret_});
-        verifier.verify(decoded);
+        if (algorithm_ == Algorithm::RS256) {
+            auto verifier = jwt::verify()
+                .allow_algorithm(jwt::algorithm::rs256(public_key_pem_, "", "", ""));
+            verifier.verify(decoded);
+        } else {
+            auto verifier = jwt::verify()
+                .allow_algorithm(jwt::algorithm::hs256{secret_});
+            verifier.verify(decoded);
+        }
         return true;
     } catch (const std::exception&) {
         return false;

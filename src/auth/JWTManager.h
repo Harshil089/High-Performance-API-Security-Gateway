@@ -52,7 +52,9 @@ public:
         const std::string& secret,
         const std::string& issuer = "api-gateway",
         const std::string& audience = "api-clients",
-        Algorithm algorithm = Algorithm::HS256
+        Algorithm algorithm = Algorithm::HS256,
+        const std::string& public_key_pem = "",
+        const std::string& private_key_pem = ""
     );
 
     /**
@@ -87,6 +89,8 @@ private:
     std::string issuer_;
     std::string audience_;
     Algorithm algorithm_;
+    std::string public_key_pem_;
+    std::string private_key_pem_;
 
     /**
      * @brief Verify token signature

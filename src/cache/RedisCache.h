@@ -26,7 +26,8 @@ public:
      * @param redis_uri Redis connection string (e.g., "tcp://127.0.0.1:6379")
      * @param key_prefix Prefix for all cache keys (default: "cache:")
      */
-    explicit RedisCache(const std::string& redis_uri, const std::string& key_prefix = "cache:");
+    explicit RedisCache(const std::string& redis_uri, const std::string& password = "",
+                        const std::string& key_prefix = "cache:");
 
     ~RedisCache() = default;
 

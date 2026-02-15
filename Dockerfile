@@ -23,6 +23,26 @@ RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/nul
     apt-get install -y cmake && \
     rm -rf /var/lib/apt/lists/*
 
+# Install hiredis (Redis C client)
+RUN cd /tmp && \
+    git clone --branch v1.2.0 --depth 1 https://github.com/redis/hiredis.git && \
+    cd hiredis && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/hiredis
+
+# Install redis-plus-plus (Redis C++ client)
+RUN cd /tmp && \
+    git clone --branch 1.3.10 --depth 1 https://github.com/sewenew/redis-plus-plus.git && \
+    cd redis-plus-plus && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DREDIS_PLUS_PLUS_CXX_STANDARD=17 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/redis-plus-plus
+
 # Set working directory
 WORKDIR /build
 
@@ -47,6 +67,11 @@ RUN apt-get update && apt-get install -y \
     wget \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy hiredis and redis-plus-plus shared libraries from builder
+COPY --from=builder /usr/local/lib/libhiredis* /usr/local/lib/
+COPY --from=builder /usr/local/lib/libredis* /usr/local/lib/
+RUN ldconfig
 
 # Create non-root user
 RUN groupadd -r gateway && useradd -r -g gateway gateway

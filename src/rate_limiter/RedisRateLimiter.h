@@ -19,7 +19,8 @@ public:
      * @param redis_uri Redis connection string (e.g., "tcp://127.0.0.1:6379")
      * @param key_prefix Prefix for all Redis keys (default: "ratelimit:")
      */
-    explicit RedisRateLimiter(const std::string& redis_uri, const std::string& key_prefix = "ratelimit:");
+    explicit RedisRateLimiter(const std::string& redis_uri, const std::string& password = "",
+                              const std::string& key_prefix = "ratelimit:");
 
     ~RedisRateLimiter() = default;
 

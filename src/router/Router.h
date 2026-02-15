@@ -6,6 +6,7 @@
 #include <regex>
 #include <optional>
 #include <map>
+#include <set>
 
 namespace gateway {
 
@@ -70,6 +71,11 @@ public:
      * @return Number of routes loaded
      */
     int loadRoutes(const std::string& routes_json);
+
+    /**
+     * @brief Get all unique backend URLs from loaded routes
+     */
+    std::vector<std::string> getAllBackendUrls() const;
 
 private:
     std::vector<Route> routes_;

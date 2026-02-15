@@ -1,27 +1,51 @@
 #include <iostream>
+#include <fstream>
 #include <csignal>
 #include <cstdlib>
 #include <memory>
+#include <thread>
+#include <atomic>
 #include "server/HttpServer.h"
 #include "auth/JWTManager.h"
 #include "rate_limiter/RateLimiter.h"
 #include "router/Router.h"
+#include "router/ProxyManager.h"
 #include "security/SecurityValidator.h"
 #include "logging/Logger.h"
 #include "config/ConfigManager.h"
+#include "admin/AdminAPI.h"
+#ifdef REDIS_AVAILABLE
+#include "cache/RedisCache.h"
+#include "rate_limiter/RedisRateLimiter.h"
+#endif
 #include <nlohmann/json.hpp>
 
 using namespace gateway;
 using json = nlohmann::json;
 
 std::shared_ptr<HttpServer> g_server;
+std::atomic<bool> g_running{true};
 
 void signalHandler(int signal) {
+    g_running = false;
     if (g_server) {
         std::cout << "\nShutting down API Gateway...\n";
         g_server->stop();
-        exit(0);
     }
+}
+
+// Helper: get env var as string, return default if not set
+static std::string getEnv(const char* name, const std::string& default_val = "") {
+    const char* val = std::getenv(name);
+    return val ? std::string(val) : default_val;
+}
+
+// Helper: get env var as bool ("true" / "1")
+static bool getEnvBool(const char* name, bool default_val = false) {
+    const char* val = std::getenv(name);
+    if (!val) return default_val;
+    std::string s(val);
+    return s == "true" || s == "1";
 }
 
 void printBanner() {
@@ -72,6 +96,27 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        // ── Environment variable overrides ───────────────────────────
+        if (getEnvBool("ADMIN_ENABLED")) {
+            config["admin"]["enabled"] = true;
+        }
+        if (getEnvBool("REDIS_ENABLED")) {
+            config["redis"]["enabled"] = true;
+        }
+        if (getEnvBool("CACHE_ENABLED")) {
+            config["cache"]["enabled"] = true;
+        }
+        // Redis host/port from env (Docker networking)
+        std::string redis_host = getEnv("REDIS_HOST");
+        std::string redis_port = getEnv("REDIS_PORT", "6379");
+        if (!redis_host.empty()) {
+            config["redis"]["uri"] = "tcp://" + redis_host + ":" + redis_port;
+        }
+        std::string redis_password = getEnv("REDIS_PASSWORD");
+        if (!redis_password.empty()) {
+            config["redis"]["password"] = redis_password;
+        }
+
         // Extract configuration values
         std::string host = config["server"]["host"].get<std::string>();
         int port = config["server"]["port"].get<int>();
@@ -102,6 +147,7 @@ int main(int argc, char* argv[]) {
         std::string jwt_issuer = config["jwt"]["issuer"].get<std::string>();
         std::string jwt_audience = config["jwt"]["audience"].get<std::string>();
         int access_token_expiry = config["jwt"]["access_token_expiry"].get<int>();
+        (void)access_token_expiry; // used by auth service, not gateway directly
 
         // Validate JWT configuration
         if (jwt_issuer.empty() || jwt_audience.empty()) {
@@ -135,8 +181,37 @@ int main(int argc, char* argv[]) {
         std::cout << "  ✓ Logger initialized\n";
 
         // JWT Manager
-        auto jwt_manager = std::make_shared<JWTManager>(jwt_secret, jwt_issuer, jwt_audience);
-        std::cout << "  ✓ JWT Manager initialized\n";
+        std::string jwt_algorithm_str = config["jwt"].value("algorithm", std::string("HS256"));
+        JWTManager::Algorithm jwt_algo = JWTManager::Algorithm::HS256;
+        std::string public_key_pem, private_key_pem;
+
+        if (jwt_algorithm_str == "RS256") {
+            jwt_algo = JWTManager::Algorithm::RS256;
+            std::string pub_key_file = config["jwt"].value("public_key_file", std::string(""));
+            std::string priv_key_file = config["jwt"].value("private_key_file", std::string(""));
+
+            if (!pub_key_file.empty()) {
+                std::ifstream pub_f(pub_key_file);
+                if (pub_f.is_open()) {
+                    public_key_pem = std::string(std::istreambuf_iterator<char>(pub_f), {});
+                    std::cout << "  ✓ RS256 public key loaded from " << pub_key_file << "\n";
+                } else {
+                    std::cerr << "ERROR: Cannot open RS256 public key file: " << pub_key_file << "\n";
+                    return 1;
+                }
+            }
+            if (!priv_key_file.empty()) {
+                std::ifstream priv_f(priv_key_file);
+                if (priv_f.is_open()) {
+                    private_key_pem = std::string(std::istreambuf_iterator<char>(priv_f), {});
+                    std::cout << "  ✓ RS256 private key loaded\n";
+                }
+            }
+        }
+
+        auto jwt_manager = std::make_shared<JWTManager>(
+            jwt_secret, jwt_issuer, jwt_audience, jwt_algo, public_key_pem, private_key_pem);
+        std::cout << "  ✓ JWT Manager initialized (" << jwt_algorithm_str << ")\n";
 
         // Rate Limiter
         auto rate_limiter = std::make_shared<RateLimiter>();
@@ -186,11 +261,154 @@ int main(int argc, char* argv[]) {
             );
         }
 
+        // IP whitelist / blacklist
+        if (config["security"].contains("ip_whitelist") && config["security"]["ip_whitelist"].is_array()) {
+            std::vector<std::string> whitelist = config["security"]["ip_whitelist"];
+            if (!whitelist.empty()) {
+                security_validator->setIPWhitelist(whitelist);
+                std::cout << "  ✓ IP whitelist configured (" << whitelist.size() << " IPs)\n";
+            }
+        }
+        if (config["security"].contains("ip_blacklist") && config["security"]["ip_blacklist"].is_array()) {
+            std::vector<std::string> blacklist = config["security"]["ip_blacklist"];
+            if (!blacklist.empty()) {
+                security_validator->setIPBlacklist(blacklist);
+                std::cout << "  ✓ IP blacklist configured (" << blacklist.size() << " IPs)\n";
+            }
+        }
+
+        // API keys
+        if (config["security"].contains("api_keys") && config["security"]["api_keys"].is_object()) {
+            std::map<std::string, std::string> api_keys;
+            for (auto& [key, val] : config["security"]["api_keys"].items()) {
+                api_keys[key] = val.get<std::string>();
+            }
+            if (!api_keys.empty()) {
+                security_validator->setAPIKeys(api_keys);
+                std::cout << "  ✓ API key authentication configured (" << api_keys.size() << " keys)\n";
+            }
+        }
+
         std::cout << "  ✓ Security Validator initialized\n";
+
+        // ── ProxyManager (shared, preserves circuit breaker state) ───
+        int cb_failure_threshold = 5;
+        int cb_recovery_timeout = 60;
+        if (config.contains("backends") && config["backends"].contains("circuit_breaker")) {
+            cb_failure_threshold = config["backends"]["circuit_breaker"].value("failure_threshold", 5);
+            cb_recovery_timeout = config["backends"]["circuit_breaker"].value("recovery_timeout", 60);
+        }
+        auto proxy_manager = std::make_shared<ProxyManager>(cb_failure_threshold, cb_recovery_timeout);
+        std::cout << "  ✓ Proxy Manager initialized (circuit breaker: threshold="
+                  << cb_failure_threshold << ", recovery=" << cb_recovery_timeout << "s)\n";
 
         // HTTP Server
         auto server = std::make_shared<HttpServer>(host, port, max_connections);
-        server->initialize(jwt_manager, rate_limiter, router, security_validator, logger);
+
+        // ── Admin API — register BEFORE initialize() so routes are added
+        //    before the catch-all ".*" handler ─────────────────────────
+        std::shared_ptr<AdminAPI> admin_api;
+        bool admin_enabled = config.contains("admin") && config["admin"].value("enabled", false);
+        std::string admin_token = config.contains("admin") ? config["admin"].value("token", std::string("")) : "";
+        std::string env_admin_token = getEnv("ADMIN_TOKEN");
+        if (!env_admin_token.empty()) {
+            admin_token = env_admin_token;
+        }
+
+        if (admin_enabled && !admin_token.empty()) {
+            admin_api = std::make_shared<AdminAPI>();
+            admin_api->registerEndpoints(server->getInternalServer(), admin_token);
+            admin_api->setCurrentConfig(config);
+
+            // Wire rate limit reset callback
+            admin_api->setRateLimitResetCallback([rate_limiter](const std::string& key) {
+                (void)rate_limiter;
+                (void)key;
+                std::cout << "Admin: Rate limit reset requested for key: " << key << std::endl;
+            });
+
+            std::cout << "  ✓ Admin API enabled at /admin/*\n";
+        } else {
+            std::cout << "  - Admin API disabled\n";
+        }
+
+        // Now register catch-all handlers (must come AFTER admin routes)
+        server->initialize(jwt_manager, rate_limiter, router, security_validator, logger, proxy_manager);
+
+        // ── Redis Cache + Distributed Rate Limiter (Task 3) ──────────
+#ifdef REDIS_AVAILABLE
+        bool redis_enabled = config.contains("redis") && config["redis"].value("enabled", false);
+        bool cache_enabled = config.contains("cache") && config["cache"].value("enabled", false);
+
+        if (redis_enabled) {
+            std::string redis_uri = config["redis"].value("uri", std::string("tcp://127.0.0.1:6379"));
+            std::string redis_pass = config["redis"].value("password", std::string(""));
+
+            try {
+                if (cache_enabled) {
+                    int cache_ttl = config.contains("cache") ? config["cache"].value("default_ttl", 300) : 300;
+                    auto redis_cache = std::make_shared<RedisCache>(redis_uri, redis_pass);
+
+                    // Wire cache into HttpServer via function callbacks
+                    server->setCache(
+                        [redis_cache](const std::string& key) -> std::optional<HttpServer::CachedResponse> {
+                            auto cached = redis_cache->get(key);
+                            if (cached) {
+                                HttpServer::CachedResponse resp;
+                                resp.body = cached->body;
+                                resp.content_type = cached->content_type;
+                                resp.status_code = cached->status_code;
+                                return resp;
+                            }
+                            return std::nullopt;
+                        },
+                        [redis_cache](const std::string& key, const HttpServer::CachedResponse& resp, int ttl) {
+                            RedisCache::CachedResponse cr;
+                            cr.body = resp.body;
+                            cr.content_type = resp.content_type;
+                            cr.status_code = resp.status_code;
+                            cr.cached_at = 0;
+                            redis_cache->set(key, cr, ttl);
+                        },
+                        cache_ttl
+                    );
+
+                    // Wire cache stats to Admin API
+                    if (admin_api) {
+                        admin_api->setCacheStatsCallback([redis_cache]() -> nlohmann::json {
+                            auto stats = redis_cache->getStats();
+                            return nlohmann::json{
+                                {"total_keys", stats.total_keys},
+                                {"memory_usage_bytes", stats.memory_usage},
+                                {"connected", redis_cache->isConnected()}
+                            };
+                        });
+                    }
+
+                    std::cout << "  ✓ Redis Cache enabled (TTL=" << cache_ttl << "s)\n";
+                }
+
+                auto redis_rate_limiter = std::make_shared<RedisRateLimiter>(redis_uri, redis_pass);
+                std::cout << "  ✓ Redis Rate Limiter connected\n";
+
+                // Wire rate limit reset to Admin API
+                if (admin_api) {
+                    admin_api->setRateLimitResetCallback([redis_rate_limiter](const std::string& key) {
+                        redis_rate_limiter->resetKey(key);
+                        std::cout << "Admin: Rate limit reset for key: " << key << std::endl;
+                    });
+                }
+
+            } catch (const std::exception& e) {
+                std::cerr << "  ✗ Redis connection failed: " << e.what() << "\n";
+                std::cerr << "    Continuing without Redis (using in-memory rate limiting)\n";
+            }
+        } else {
+            std::cout << "  - Redis disabled\n";
+        }
+#else
+        std::cout << "  - Redis support not compiled in\n";
+#endif
 
         // Configure security headers
         if (config["security"].contains("headers")) {
@@ -239,6 +457,28 @@ int main(int argc, char* argv[]) {
 
         g_server = server;
 
+        // ── Background health check thread ───────────────────────────
+        int health_check_interval = config.contains("backends") ? config["backends"].value("health_check_interval", 10) : 10;
+        auto backend_urls = router->getAllBackendUrls();
+
+        std::thread health_thread([proxy_manager, backend_urls, health_check_interval, logger]() {
+            std::cout << "Health checker: monitoring " << backend_urls.size() << " backends every "
+                      << health_check_interval << "s\n";
+            while (g_running) {
+                for (const auto& url : backend_urls) {
+                    if (!g_running) break;
+                    bool healthy = proxy_manager->performHealthCheck(url);
+                    if (!healthy) {
+                        logger->warn("Health check failed for backend: " + url);
+                    }
+                }
+                for (int i = 0; i < health_check_interval && g_running; ++i) {
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                }
+            }
+        });
+        health_thread.detach();
+
         // Start server
         std::cout << "╔═══════════════════════════════════════════════════════════════╗\n";
         std::cout << "║  API Gateway is running on " << host << ":" << port << std::string(28 - host.length() - std::to_string(port).length(), ' ') << "║\n";
@@ -252,11 +492,13 @@ int main(int argc, char* argv[]) {
 
         if (!server->start()) {
             std::cerr << "Failed to start server\n";
+            g_running = false;
             return 1;
         }
 
     } catch (const std::exception& e) {
         std::cerr << "Fatal error: " << e.what() << "\n";
+        g_running = false;
         return 1;
     }
 

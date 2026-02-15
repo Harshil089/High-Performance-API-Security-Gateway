@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <set>
 
 namespace gateway {
 
@@ -77,6 +78,16 @@ int Router::loadRoutes(const std::string& routes_json) {
         std::cerr << "Error loading routes: " << e.what() << "\n";
         return 0;
     }
+}
+
+std::vector<std::string> Router::getAllBackendUrls() const {
+    std::set<std::string> unique_urls;
+    for (const auto& route : routes_) {
+        for (const auto& backend : route.backends) {
+            unique_urls.insert(backend);
+        }
+    }
+    return std::vector<std::string>(unique_urls.begin(), unique_urls.end());
 }
 
 std::regex Router::patternToRegex(const std::string& pattern) {

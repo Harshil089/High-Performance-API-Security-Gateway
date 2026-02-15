@@ -7,7 +7,8 @@ using json = nlohmann::json;
 
 namespace gateway {
 
-RedisCache::RedisCache(const std::string& redis_uri, const std::string& key_prefix)
+RedisCache::RedisCache(const std::string& redis_uri, const std::string& password,
+                       const std::string& key_prefix)
     : key_prefix_(key_prefix) {
     try {
         sw::redis::ConnectionOptions opts;
@@ -23,6 +24,10 @@ RedisCache::RedisCache(const std::string& redis_uri, const std::string& key_pref
                 opts.host = host_port.substr(0, colon_pos);
                 opts.port = std::stoi(host_port.substr(colon_pos + 1));
             }
+        }
+
+        if (!password.empty()) {
+            opts.password = password;
         }
 
         redis_ = std::make_unique<sw::redis::Redis>(opts);

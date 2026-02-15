@@ -240,6 +240,39 @@ void SecurityValidator::setMaxConnectionsPerIP(int max_connections) {
     max_connections_per_ip_ = max_connections;
 }
 
+void SecurityValidator::setIPWhitelist(const std::vector<std::string>& ips) {
+    ip_whitelist_ = std::set<std::string>(ips.begin(), ips.end());
+}
+
+void SecurityValidator::setIPBlacklist(const std::vector<std::string>& ips) {
+    ip_blacklist_ = std::set<std::string>(ips.begin(), ips.end());
+}
+
+bool SecurityValidator::isIPAllowed(const std::string& ip) {
+    // Blacklist takes priority — always reject blacklisted IPs
+    if (!ip_blacklist_.empty() && ip_blacklist_.count(ip)) {
+        return false;
+    }
+
+    // If whitelist is set, only allow whitelisted IPs
+    if (!ip_whitelist_.empty()) {
+        return ip_whitelist_.count(ip) > 0;
+    }
+
+    return true;
+}
+
+void SecurityValidator::setAPIKeys(const std::map<std::string, std::string>& api_keys) {
+    api_keys_ = api_keys;
+}
+
+bool SecurityValidator::validateAPIKey(const std::string& api_key) {
+    if (api_key.empty() || api_keys_.empty()) {
+        return false;
+    }
+    return api_keys_.count(api_key) > 0;
+}
+
 bool SecurityValidator::containsPathTraversal(const std::string& path) {
     return path.find("..") != std::string::npos ||
            path.find("./") != std::string::npos ||

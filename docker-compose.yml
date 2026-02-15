@@ -84,6 +84,7 @@ services:
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
 
       # Redis configuration
+      - REDIS_ENABLED=${REDIS_ENABLED:-true}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-gateway-redis-pass}

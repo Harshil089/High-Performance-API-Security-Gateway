@@ -18,7 +18,9 @@
     "issuer": "api-gateway",
     "audience": "api-clients",
     "access_token_expiry": 3600,
-    "refresh_token_expiry": 86400
+    "refresh_token_expiry": 86400,
+    "public_key_file": "",
+    "private_key_file": ""
   },
   "rate_limits": {
     "global": {
@@ -65,7 +67,10 @@
       "x_content_type_options": "nosniff",
       "x_xss_protection": "1; mode=block",
       "referrer_policy": "strict-origin-when-cross-origin"
-    }
+    },
+    "ip_whitelist": [],
+    "ip_blacklist": [],
+    "api_keys": {}
   },
   "backends": {
     "health_check_interval": 10,

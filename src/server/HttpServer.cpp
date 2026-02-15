@@ -24,13 +24,15 @@ void HttpServer::initialize(
     std::shared_ptr<RateLimiter> rate_limiter,
     std::shared_ptr<Router> router,
     std::shared_ptr<SecurityValidator> security_validator,
-    std::shared_ptr<Logger> logger
+    std::shared_ptr<Logger> logger,
+    std::shared_ptr<ProxyManager> proxy_manager
 ) {
     jwt_manager_ = jwt_manager;
     rate_limiter_ = rate_limiter;
     router_ = router;
     security_validator_ = security_validator;
     logger_ = logger;
+    proxy_manager_ = proxy_manager;
 
     setupHandlers();
 }
@@ -123,8 +125,27 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
     // Add security headers to all responses
     addSecurityHeaders(res);
 
-    // Skip processing if already handled (like /health, /metrics)
-    if (req.path == "/health" || req.path == "/metrics") {
+    // Add X-Request-ID to response
+    res.set_header("X-Request-ID", request_id);
+
+    // Skip processing if already handled (like /health, /metrics, /admin/*)
+    if (req.path == "/health" || req.path == "/metrics" ||
+        req.path.find("/admin/") == 0) {
+        return;
+    }
+
+    // IP filtering — reject blacklisted / non-whitelisted IPs early
+    if (!security_validator_->isIPAllowed(client_ip)) {
+        res.status = StatusCode::FORBIDDEN;
+        res.set_content(ResponseBuilder::errorJson("Access denied"), "application/json");
+
+        auto end_time = std::chrono::steady_clock::now();
+        auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            end_time - start_time
+        ).count();
+
+        logRequest(request_id, client_ip, req.method, req.path, res.status,
+                  response_time, user_id, "", "IP blocked");
         return;
     }
 
@@ -264,9 +285,31 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
         return;
     }
 
-    // Proxy to backend
-    auto proxy_manager = std::make_shared<ProxyManager>();
-    auto proxy_response = proxy_manager->forwardRequest(
+    // Check cache for GET requests
+    std::string cache_key = req.method + ":" + req.path;
+    if (req.method == "GET" && cache_get_) {
+        auto cached = cache_get_(cache_key);
+        if (cached) {
+            res.status = cached->status_code;
+            res.set_content(cached->body, cached->content_type.c_str());
+            res.set_header("X-Cache", "HIT");
+
+            auto end_time = std::chrono::steady_clock::now();
+            auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                end_time - start_time
+            ).count();
+
+            metrics_->incrementRequests(req.method, req.path, res.status);
+            metrics_->recordRequestDuration(req.method, static_cast<double>(response_time));
+            logRequest(request_id, client_ip, req.method, req.path, res.status,
+                      response_time, user_id, "cache", "");
+            return;
+        }
+    }
+
+    // Proxy to backend (use shared ProxyManager to preserve circuit breaker state)
+    headers_map["X-Request-ID"] = request_id;
+    auto proxy_response = proxy_manager_->forwardRequest(
         req.method,
         match.backend_url,
         match.rewritten_path,
@@ -281,6 +324,16 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
 
         for (const auto& [key, value] : proxy_response.headers) {
             res.set_header(key.c_str(), value.c_str());
+        }
+
+        // Store in cache for successful GET responses
+        if (req.method == "GET" && cache_set_ && proxy_response.status_code == 200) {
+            CachedResponse to_cache;
+            to_cache.body = proxy_response.body;
+            to_cache.content_type = "application/json";
+            to_cache.status_code = proxy_response.status_code;
+            cache_set_(cache_key, to_cache, cache_ttl_);
+            res.set_header("X-Cache", "MISS");
         }
     } else {
         res.status = StatusCode::BAD_GATEWAY;
@@ -355,18 +408,27 @@ std::string HttpServer::getClientIP(const httplib::Request& req) {
 }
 
 bool HttpServer::validateAuth(const httplib::Request& req, std::string& user_id) {
+    // Check API key first (X-API-Key header)
+    if (req.has_header("X-API-Key")) {
+        std::string api_key = req.get_header_value("X-API-Key");
+        if (security_validator_->validateAPIKey(api_key)) {
+            user_id = "api-key-user";
+            return true;
+        }
+    }
+
+    // Fall back to JWT Bearer token
     if (!req.has_header("Authorization")) {
         return false;
     }
 
     std::string auth_header = req.get_header_value("Authorization");
 
-    // Check Bearer token
     if (auth_header.find("Bearer ") != 0) {
         return false;
     }
 
-    std::string token = auth_header.substr(7); // Remove "Bearer "
+    std::string token = auth_header.substr(7);
 
     auto validation_result = jwt_manager_->validateToken(token);
     if (validation_result.is_valid) {

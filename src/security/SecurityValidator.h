@@ -122,6 +122,35 @@ public:
      */
     void setMaxConnectionsPerIP(int max_connections);
 
+    /**
+     * @brief Set IP whitelist (only these IPs allowed if non-empty)
+     */
+    void setIPWhitelist(const std::vector<std::string>& ips);
+
+    /**
+     * @brief Set IP blacklist (these IPs are always blocked)
+     */
+    void setIPBlacklist(const std::vector<std::string>& ips);
+
+    /**
+     * @brief Check if an IP is allowed based on whitelist/blacklist
+     * @param ip Client IP address
+     * @return true if IP is allowed
+     */
+    bool isIPAllowed(const std::string& ip);
+
+    /**
+     * @brief Set valid API keys (key -> description/owner)
+     */
+    void setAPIKeys(const std::map<std::string, std::string>& api_keys);
+
+    /**
+     * @brief Validate an API key
+     * @param api_key The API key from X-API-Key header
+     * @return true if valid
+     */
+    bool validateAPIKey(const std::string& api_key);
+
 private:
     size_t max_header_size_;
     size_t max_body_size_;
@@ -133,6 +162,10 @@ private:
 
     std::vector<std::string> sql_injection_patterns_;
     std::vector<std::string> xss_patterns_;
+
+    std::set<std::string> ip_whitelist_;
+    std::set<std::string> ip_blacklist_;
+    std::map<std::string, std::string> api_keys_;
 
     /**
      * @brief Initialize security patterns

@@ -4,7 +4,8 @@
 
 namespace gateway {
 
-RedisRateLimiter::RedisRateLimiter(const std::string& redis_uri, const std::string& key_prefix)
+RedisRateLimiter::RedisRateLimiter(const std::string& redis_uri, const std::string& password,
+                                   const std::string& key_prefix)
     : key_prefix_(key_prefix) {
     try {
         sw::redis::ConnectionOptions opts;
@@ -20,6 +21,10 @@ RedisRateLimiter::RedisRateLimiter(const std::string& redis_uri, const std::stri
                 opts.host = host_port.substr(0, colon_pos);
                 opts.port = std::stoi(host_port.substr(colon_pos + 1));
             }
+        }
+
+        if (!password.empty()) {
+            opts.password = password;
         }
 
         redis_ = std::make_unique<sw::redis::Redis>(opts);
@@ -46,11 +51,12 @@ bool RedisRateLimiter::allowRequest(const std::string& key, int max_requests, in
         auto pipe = redis_->pipeline();
 
         // Remove old entries outside the window
-        auto window_start = timestamp - (window_seconds * 1000);
-        pipe.zremrangebyscore(full_key, sw::redis::UnboundedInterval<double>{0, window_start});
+        double window_start = static_cast<double>(timestamp - (window_seconds * 1000));
+        double ts_double = static_cast<double>(timestamp);
+        pipe.zremrangebyscore(full_key, sw::redis::BoundedInterval<double>(0, window_start, sw::redis::BoundType::CLOSED));
 
         // Count current entries in window
-        pipe.zcount(full_key, sw::redis::UnboundedInterval<double>{window_start, timestamp});
+        pipe.zcount(full_key, sw::redis::BoundedInterval<double>(window_start, ts_double, sw::redis::BoundType::CLOSED));
 
         // Add current request
         pipe.zadd(full_key, std::to_string(timestamp), timestamp);
@@ -87,7 +93,9 @@ int RedisRateLimiter::getCurrentCount(const std::string& key, int window_seconds
         std::string full_key = getFullKey(key);
         auto window_start = timestamp - (window_seconds * 1000);
 
-        return redis_->zcount(full_key, sw::redis::UnboundedInterval<double>{window_start, timestamp});
+        double ws = static_cast<double>(window_start);
+        double ts = static_cast<double>(timestamp);
+        return redis_->zcount(full_key, sw::redis::BoundedInterval<double>(ws, ts, sw::redis::BoundType::CLOSED));
     } catch (const std::exception& e) {
         std::cerr << "Error getting count from Redis: " << e.what() << std::endl;
         return 0;

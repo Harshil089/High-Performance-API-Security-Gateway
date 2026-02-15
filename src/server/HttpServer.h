@@ -4,6 +4,7 @@
 #include <memory>
 #include <functional>
 #include <map>
+#include <optional>
 #include <httplib.h>
 #include "../auth/JWTManager.h"
 #include "../rate_limiter/RateLimiter.h"
@@ -11,8 +12,11 @@
 #include "../security/SecurityValidator.h"
 #include "../logging/Logger.h"
 #include "../metrics/SimpleMetrics.h"
+#include "../router/ProxyManager.h"
 
 namespace gateway {
+
+class AdminAPI;
 
 /**
  * @brief Main HTTP server handling incoming requests
@@ -52,8 +56,14 @@ public:
         std::shared_ptr<RateLimiter> rate_limiter,
         std::shared_ptr<Router> router,
         std::shared_ptr<SecurityValidator> security_validator,
-        std::shared_ptr<Logger> logger
+        std::shared_ptr<Logger> logger,
+        std::shared_ptr<ProxyManager> proxy_manager
     );
+
+    /**
+     * @brief Get reference to internal httplib server (for admin endpoint registration)
+     */
+    httplib::Server& getInternalServer() { return *server_; }
 
     /**
      * @brief Start the server (blocking)
@@ -79,6 +89,20 @@ public:
      */
     void setSecurityHeaders(const std::map<std::string, std::string>& headers);
 
+    struct CachedResponse {
+        std::string body;
+        std::string content_type;
+        int status_code;
+    };
+    using CacheGetFn = std::function<std::optional<CachedResponse>(const std::string& key)>;
+    using CacheSetFn = std::function<void(const std::string& key, const CachedResponse& resp, int ttl)>;
+
+    void setCache(CacheGetFn get_fn, CacheSetFn set_fn, int default_ttl = 300) {
+        cache_get_ = std::move(get_fn);
+        cache_set_ = std::move(set_fn);
+        cache_ttl_ = default_ttl;
+    }
+
 private:
     std::string host_;
     int port_;
@@ -91,12 +115,17 @@ private:
     std::shared_ptr<SecurityValidator> security_validator_;
     std::shared_ptr<Logger> logger_;
     std::shared_ptr<SimpleMetrics> metrics_;
+    std::shared_ptr<ProxyManager> proxy_manager_;
 
     bool tls_enabled_;
     std::string cert_file_;
     std::string key_file_;
 
     std::map<std::string, std::string> security_headers_;
+
+    CacheGetFn cache_get_;
+    CacheSetFn cache_set_;
+    int cache_ttl_ = 300;
 
     /**
      * @brief Setup request handlers
