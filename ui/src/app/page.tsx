@@ -1,11 +1,17 @@
 "use client";
 
 import { MetricsOverview } from "@/components/dashboard/MetricsOverview";
+import { RequestRateChart } from "@/components/dashboard/RequestRateChart";
+import { StatusCodeChart } from "@/components/dashboard/StatusCodeChart";
+import { BackendHealthChart } from "@/components/dashboard/BackendHealthChart";
+import { useMetrics } from "@/lib/hooks/useMetrics";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, Shield, Database, Settings } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardPage() {
+  const { metrics } = useMetrics();
+
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* Header */}
@@ -18,6 +24,23 @@ export default function DashboardPage() {
 
       {/* Metrics Overview */}
       <MetricsOverview />
+
+      {/* Charts */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {metrics && (
+          <>
+            <RequestRateChart
+              currentRequests={metrics.totalRequests}
+              activeConnections={metrics.activeConnections}
+            />
+            <StatusCodeChart statusCodes={metrics.statusCodes} />
+          </>
+        )}
+      </div>
+
+      {metrics && metrics.backends.length > 0 && (
+        <BackendHealthChart backends={metrics.backends} />
+      )}
 
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

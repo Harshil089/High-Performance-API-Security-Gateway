@@ -53,10 +53,11 @@ docker compose up api-gateway redis auth-service user-service gateway-ui
 
 ## 📊 What You'll See
 
-### Dashboard Overview
+### Dashboard Overview (`/`)
 
 When you open the UI, you'll immediately see:
 
+**Metrics Cards:**
 1. **Total Requests** - Lifetime request count
 2. **Active Connections** - Current connected clients
 3. **Auth Success Rate** - Authentication performance
@@ -64,9 +65,57 @@ When you open the UI, you'll immediately see:
 5. **Status Codes** - 2xx/4xx/5xx distribution
 6. **Backend Health** - Service status
 
+**Real-Time Charts:**
+1. **Request Activity Chart** - Line graph showing request growth over time with calculated rate (req/s)
+2. **Status Code Distribution** - Pie chart showing 2xx (green), 4xx (amber), 5xx (red) breakdown
+3. **Backend Health Chart** - Bar chart displaying error counts per backend service
+
+**Quick Actions:**
+- Navigate to Routes, Security, Cache, Settings pages
+
+### Routes Management (`/routes`)
+
+Click "Routes" from the dashboard to:
+
+- **View all routes** in a sortable table (click column headers to sort)
+- **Add new routes** with comprehensive form:
+  - Single backend, load-balanced backends, or handler functions
+  - Configure timeouts, authentication, path rewriting
+  - Visual validation
+- **Edit existing routes** by clicking the pencil icon
+- **Delete routes** with confirmation dialog (trash icon)
+
+No more manual JSON editing! All route changes are applied immediately.
+
+### Security Settings (`/security`)
+
+Click "Security" from the dashboard to access three security management tabs:
+
+**JWT Authentication:**
+- **Algorithm Selection**: Choose HS256 (symmetric) or RS256 (asymmetric)
+- **HS256 Mode**: Enter secret key with show/hide toggle
+- **RS256 Mode**: Specify public and private key file paths
+- **Token Configuration**: Set issuer, audience, access token expiry (1min - 24hrs), refresh token expiry (1hr - 30 days)
+- **Visual Feedback**: Duration conversion (seconds → minutes/days), unsaved changes indicator
+
+**API Key Management:**
+- **View All Keys**: Table showing Key ID, Name, truncated key, permissions, rate limits
+- **Generate Keys**: Auto-generate secure keys with `gw_` prefix
+- **Copy to Clipboard**: One-click copy with visual confirmation
+- **Permissions**: Assign comma-separated permissions per key
+- **Rate Limiting**: Optional per-key rate limits (requests/window)
+- **Revoke Keys**: Delete with confirmation dialog
+
+**IP Filtering:**
+- **Whitelist**: Allow access only from specific IPs or CIDR ranges
+- **Blacklist**: Block specific IPs or CIDR ranges
+- **IP Validation**: Real-time validation for IPv4, IPv6, and CIDR notation
+- **Visual Indicators**: Green for allowed, red for blocked
+- **Examples**: 192.168.1.1 (single IP), 10.0.0.0/24 (CIDR range), ::1 (IPv6)
+
 ### Real-Time Updates
 
-Metrics automatically refresh every 5 seconds. No manual refresh needed!
+Metrics and charts automatically refresh every 5 seconds. No manual refresh needed!
 
 ## 🔧 Configuration
 
@@ -145,6 +194,9 @@ Once the UI is running:
 2. **Check Backend Health** - See which services are healthy
 3. **View Status Codes** - Identify error patterns
 4. **Track Auth Success** - Monitor security
+5. **Manage Routes** - Add/edit/delete API routes visually
+6. **Configure Security** - Set up JWT, API keys, and IP filtering
+7. **Explore Features** - Try all three implemented pages (Dashboard, Routes, Security)
 
 ## 🔒 Security Notes
 
