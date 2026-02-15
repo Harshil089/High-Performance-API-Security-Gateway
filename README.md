@@ -75,6 +75,23 @@ Client Request
 
 All admin endpoints require Bearer token authentication.
 
+### Admin UI Dashboard 🎨 **NEW**
+A modern, production-ready web interface for managing the gateway:
+
+- **Real-time Dashboard** -- Live metrics with auto-refresh (5s interval)
+  - Total requests, active connections, auth success rate
+  - HTTP status code distribution (2xx/4xx/5xx)
+  - Cache hit rate and backend health
+- **Secure Architecture** -- Admin token never exposed to browser (BFF pattern)
+- **Modern Stack** -- Next.js 14, TypeScript, TailwindCSS, TanStack Query
+- **Docker Ready** -- Single command deployment via docker-compose
+
+Access at [http://localhost:3001](http://localhost:3001) after starting with Docker.
+
+📖 **Quick Start**: [UI-QUICKSTART.md](UI-QUICKSTART.md)
+📚 **Full Docs**: [ui/README.md](ui/README.md)
+📋 **Implementation**: [UI-IMPLEMENTATION-SUMMARY.md](UI-IMPLEMENTATION-SUMMARY.md)
+
 ### Observability
 - **Prometheus metrics** at `/metrics` -- request counts, auth success/failure, rate limit hits, backend latency, request duration, active connections
 - **Grafana dashboard** with 9 pre-configured panels (request rate, status codes, latency, cache hit rate, etc.)
@@ -101,13 +118,14 @@ docker compose up -d --build
 docker compose ps
 ```
 
-This starts 4 containers:
+This starts 5 containers:
 | Service | Port | Description |
 |---------|------|-------------|
 | `api-gateway` | 8080 | The C++ gateway |
+| `gateway-ui` | 3001 | **Admin UI Dashboard** (Next.js) |
 | `redis` | 6379 | Cache + distributed rate limiting |
-| `auth-service` | 3001 | Mock authentication service |
-| `user-service` | 3002 | Mock user service |
+| `auth-service` | 3002 | Mock authentication service |
+| `user-service` | 3003 | Mock user service |
 
 Optional monitoring (add `--profile monitoring`):
 | Service | Port | Description |

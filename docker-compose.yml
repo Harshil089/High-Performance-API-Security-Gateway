@@ -132,6 +132,33 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # Admin UI - Web-based gateway management interface
+  gateway-ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: api-gateway-ui
+    environment:
+      - GATEWAY_URL=http://api-gateway:8080
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - NODE_ENV=${NODE_ENV:-production}
+      - NEXT_PUBLIC_APP_NAME=API Gateway Admin
+      - NEXT_PUBLIC_REFRESH_INTERVAL=5000
+    ports:
+      - "3001:3000"
+    networks:
+      - gateway-network
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
   # Prometheus (optional - for monitoring)
   prometheus:
     image: prom/prometheus:latest
