@@ -1,0 +1,208 @@
+groups:
+  # =========================================================================
+  # Gateway Availability Alerts
+  # =========================================================================
+  - name: gateway_availability
+    interval: 30s
+    rules:
+      - alert: GatewayDown
+        expr: up{job="api-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "API Gateway is DOWN"
+          description: "The API Gateway instance has been unreachable for more than 1 minute."
+          runbook_url: "https://wiki.internal/runbooks/gateway-down"
+
+      - alert: GatewayHighMemory
+        expr: process_resident_memory_bytes{job="api-gateway"} > 400 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Gateway memory usage high"
+          description: "Gateway memory usage is {{ $value | humanize1024 }} (threshold: 400MB)."
+
+  # =========================================================================
+  # Error Rate Alerts
+  # =========================================================================
+  - name: gateway_errors
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(gateway_http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(gateway_http_requests_total[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "High 5xx error rate: {{ $value | humanizePercentage }}"
+          description: "More than 5% of requests are returning 5xx errors over the last 5 minutes."
+
+      - alert: Elevated4xxRate
+        expr: |
+          (
+            sum(rate(gateway_http_requests_total{status=~"4.."}[5m]))
+            /
+            sum(rate(gateway_http_requests_total[5m]))
+          ) > 0.20
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Elevated 4xx error rate: {{ $value | humanizePercentage }}"
+          description: "More than 20% of requests are returning 4xx errors."
+
+  # =========================================================================
+  # Latency Alerts
+  # =========================================================================
+  - name: gateway_latency
+    interval: 30s
+    rules:
+      - alert: HighP95Latency
+        expr: |
+          gateway_request_duration_ms_sum / gateway_request_duration_ms_count > 500
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High average latency: {{ $value }}ms"
+          description: "Average request latency exceeds 500ms for more than 5 minutes."
+
+      - alert: CriticalLatency
+        expr: |
+          gateway_request_duration_ms_sum / gateway_request_duration_ms_count > 2000
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Critical latency: {{ $value }}ms"
+          description: "Average request latency exceeds 2000ms. Investigate immediately."
+
+  # =========================================================================
+  # Security Alerts
+  # =========================================================================
+  - name: gateway_security
+    interval: 30s
+    rules:
+      - alert: AuthFailureSpike
+        expr: rate(gateway_auth_failure_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Authentication failure spike"
+          description: "{{ $value | printf \"%.1f\" }} auth failures per second detected. Possible brute-force attack."
+
+      - alert: AuthFailureCritical
+        expr: rate(gateway_auth_failure_total[5m]) > 50
+        for: 1m
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Critical authentication failure rate"
+          description: "{{ $value | printf \"%.1f\" }} auth failures/s. Likely credential stuffing attack."
+
+      - alert: RateLimitHigh
+        expr: rate(gateway_rate_limit_hits_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "High rate limiting activity"
+          description: "{{ $value | printf \"%.1f\" }} rate limit hits per second. Possible DDoS or abuse."
+
+      - alert: RateLimitCritical
+        expr: rate(gateway_rate_limit_hits_total[5m]) > 1000
+        for: 2m
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Critical rate limit activity - potential DDoS"
+          description: "{{ $value | printf \"%.0f\" }} rate limit hits/s. Immediate investigation required."
+
+  # =========================================================================
+  # Backend Health Alerts
+  # =========================================================================
+  - name: gateway_backends
+    interval: 30s
+    rules:
+      - alert: BackendHighErrorRate
+        expr: |
+          rate(gateway_backend_errors_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Backend errors elevated for {{ $labels.backend }}"
+          description: "Backend {{ $labels.backend }} is returning {{ $value | printf \"%.1f\" }} errors/s."
+
+      - alert: BackendHighLatency
+        expr: |
+          (gateway_backend_latency_ms_sum / gateway_backend_latency_ms_count) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Backend {{ $labels.backend }} latency is {{ $value }}ms"
+          description: "Backend latency exceeds 1s. Check backend service health."
+
+  # =========================================================================
+  # Cache Performance Alerts
+  # =========================================================================
+  - name: gateway_cache
+    interval: 60s
+    rules:
+      - alert: LowCacheHitRate
+        expr: |
+          (gateway_cache_hits_total / (gateway_cache_hits_total + gateway_cache_misses_total)) < 0.3
+        for: 15m
+        labels:
+          severity: info
+          team: platform
+        annotations:
+          summary: "Low cache hit rate: {{ $value | humanizePercentage }}"
+          description: "Cache hit rate is below 30%. Review caching strategy."
+
+  # =========================================================================
+  # Connection Alerts
+  # =========================================================================
+  - name: gateway_connections
+    interval: 30s
+    rules:
+      - alert: HighConnectionCount
+        expr: gateway_active_connections > 8000
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High connection count: {{ $value }}"
+          description: "Active connections approaching limit (10,000). Consider scaling."
+
+      - alert: ConnectionLimitReached
+        expr: gateway_active_connections > 9500
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Connection limit nearly reached: {{ $value }}/10000"
+          description: "Gateway is near connection capacity. Scale immediately."

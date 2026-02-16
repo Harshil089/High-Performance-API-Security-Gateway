@@ -13,11 +13,11 @@ export default function DashboardPage() {
   const { metrics } = useMetrics();
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 p-4 md:gap-6 md:p-6">
       {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-sm md:text-base text-muted-foreground">
           Monitor your API Gateway performance and health
         </p>
       </div>
@@ -26,7 +26,7 @@ export default function DashboardPage() {
       <MetricsOverview />
 
       {/* Charts */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-4 md:gap-6 md:grid-cols-2">
         {metrics && (
           <>
             <RequestRateChart
@@ -43,7 +43,7 @@ export default function DashboardPage() {
       )}
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 md:gap-4">
         <QuickActionCard
           title="Routes"
           description="Manage API routes and backends"
@@ -139,11 +139,11 @@ interface QuickActionCardProps {
 function QuickActionCard({ title, description, icon: Icon, href }: QuickActionCardProps) {
   return (
     <Link href={href}>
-      <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
-        <CardHeader>
+      <Card className="hover:bg-accent active:bg-accent/80 active:scale-[0.98] transition-all cursor-pointer h-full select-none">
+        <CardHeader className="p-4 md:p-6">
           <div className="flex items-center gap-2">
-            <Icon className="h-5 w-5 text-primary" />
-            <CardTitle className="text-base">{title}</CardTitle>
+            <Icon className="h-5 w-5 text-primary shrink-0" />
+            <CardTitle className="text-sm md:text-base">{title}</CardTitle>
           </div>
           <CardDescription className="text-xs">{description}</CardDescription>
         </CardHeader>

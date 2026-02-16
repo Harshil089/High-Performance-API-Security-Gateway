@@ -12,7 +12,9 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Pencil, Trash2, Shield, ShieldOff } from "lucide-react";
+import { useIsMobile } from "@/lib/hooks/useIsMobile";
 
 interface RouteTableProps {
   routes: RouteConfig[];
@@ -24,6 +26,7 @@ interface RouteTableProps {
 export function RouteTable({ routes, onEdit, onDelete, isLoading }: RouteTableProps) {
   const [sortBy, setSortBy] = useState<keyof RouteConfig | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const isMobile = useIsMobile();
 
   const handleSort = (key: keyof RouteConfig) => {
     if (sortBy === key) {
@@ -36,28 +39,18 @@ export function RouteTable({ routes, onEdit, onDelete, isLoading }: RouteTablePr
 
   const sortedRoutes = [...routes].sort((a, b) => {
     if (!sortBy) return 0;
-
     const aVal = a[sortBy];
     const bVal = b[sortBy];
-
     if (aVal === undefined || bVal === undefined) return 0;
-
     if (typeof aVal === "string" && typeof bVal === "string") {
-      return sortOrder === "asc"
-        ? aVal.localeCompare(bVal)
-        : bVal.localeCompare(aVal);
+      return sortOrder === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
     }
-
     if (typeof aVal === "number" && typeof bVal === "number") {
       return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
     }
-
     if (typeof aVal === "boolean" && typeof bVal === "boolean") {
-      return sortOrder === "asc"
-        ? (aVal ? 1 : 0) - (bVal ? 1 : 0)
-        : (bVal ? 1 : 0) - (aVal ? 1 : 0);
+      return sortOrder === "asc" ? (aVal ? 1 : 0) - (bVal ? 1 : 0) : (bVal ? 1 : 0) - (aVal ? 1 : 0);
     }
-
     return 0;
   });
 
@@ -66,25 +59,28 @@ export function RouteTable({ routes, onEdit, onDelete, isLoading }: RouteTablePr
       return <Badge variant="secondary">{route.handler}</Badge>;
     }
     if (route.backend) {
-      return <span className="text-sm">{route.backend}</span>;
+      return <span className="text-xs md:text-sm break-all">{route.backend}</span>;
     }
     if (route.backends && route.backends.length > 0) {
       return (
         <div className="flex flex-col gap-1">
-          {route.backends.map((backend, idx) => (
-            <span key={idx} className="text-sm">
+          {route.backends.slice(0, isMobile ? 1 : route.backends.length).map((backend, idx) => (
+            <span key={idx} className="text-xs md:text-sm break-all">
               {backend}
             </span>
           ))}
+          {isMobile && route.backends.length > 1 && (
+            <span className="text-xs text-muted-foreground">+{route.backends.length - 1} more</span>
+          )}
           {route.load_balancing && (
-            <Badge variant="outline" className="w-fit">
+            <Badge variant="outline" className="w-fit text-xs">
               {route.load_balancing}
             </Badge>
           )}
         </div>
       );
     }
-    return <span className="text-muted-foreground">None</span>;
+    return <span className="text-muted-foreground text-xs">None</span>;
   };
 
   if (isLoading) {
@@ -108,8 +104,67 @@ export function RouteTable({ routes, onEdit, onDelete, isLoading }: RouteTablePr
     );
   }
 
+  // Mobile: card layout
+  if (isMobile) {
+    return (
+      <div className="space-y-3">
+        {sortedRoutes.map((route, index) => (
+          <Card key={index} className="overflow-hidden">
+            <CardContent className="p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <code className="text-xs font-mono font-bold bg-muted px-1.5 py-0.5 rounded break-all">
+                    {route.path}
+                  </code>
+                  <div className="mt-2 space-y-1.5">
+                    <div className="text-xs text-muted-foreground">
+                      {getBackendDisplay(route)}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-muted-foreground">{route.timeout}ms</span>
+                      {route.require_auth ? (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
+                          <Shield className="h-2.5 w-2.5 mr-0.5" />
+                          Auth
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                          <ShieldOff className="h-2.5 w-2.5 mr-0.5" />
+                          Open
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-1.5 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => onEdit(index, route)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => onDelete(index)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  // Desktop: table layout
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border overflow-x-auto touch-scroll">
       <Table>
         <TableHeader>
           <TableRow>
@@ -171,18 +226,10 @@ export function RouteTable({ routes, onEdit, onDelete, isLoading }: RouteTablePr
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onEdit(index, route)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => onEdit(index, route)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => onDelete(index)}
-                  >
+                  <Button variant="destructive" size="sm" onClick={() => onDelete(index)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

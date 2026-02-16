@@ -67,17 +67,17 @@ export default function RoutesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Routes</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage API routes and backend configurations
+    <div className="flex flex-col gap-4 p-4 md:gap-6 md:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl md:text-3xl font-bold">Routes</h1>
+          <p className="text-sm md:text-base text-muted-foreground mt-1">
+            Manage API routes and backends
           </p>
         </div>
-        <Button onClick={handleAddRoute}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Route
+        <Button onClick={handleAddRoute} className="shrink-0">
+          <Plus className="h-4 w-4 md:mr-2" />
+          <span className="hidden md:inline">Add Route</span>
         </Button>
       </div>
 

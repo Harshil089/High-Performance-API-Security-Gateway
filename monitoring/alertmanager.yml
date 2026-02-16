@@ -1,0 +1,123 @@
+global:
+  resolve_timeout: 5m
+  smtp_from: 'alerts@yourdomain.com'
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_auth_username: 'alerts@yourdomain.com'
+  smtp_auth_password: 'CHANGE_ME'
+  smtp_require_tls: true
+
+# Inhibition rules - prevent duplicate alerting
+inhibit_rules:
+  # If gateway is down, suppress all other gateway alerts
+  - source_matchers:
+      - alertname = GatewayDown
+    target_matchers:
+      - team = platform
+    equal: ['instance']
+
+  # If critical error rate, suppress warning-level error alerts
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: ['alertname']
+
+# Routing tree
+route:
+  receiver: 'default-slack'
+  group_by: ['alertname', 'severity', 'team']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  routes:
+    # Critical alerts -> PagerDuty + Slack
+    - match:
+        severity: critical
+      receiver: 'critical-pagerduty'
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+
+    - match:
+        severity: critical
+      receiver: 'critical-slack'
+      group_wait: 10s
+
+    # Security alerts -> Security team Slack channel
+    - match:
+        team: security
+      receiver: 'security-slack'
+      group_wait: 15s
+      repeat_interval: 2h
+
+    # Warning alerts -> Platform Slack channel
+    - match:
+        severity: warning
+      receiver: 'default-slack'
+      repeat_interval: 4h
+
+    # Info alerts -> Low-priority channel
+    - match:
+        severity: info
+      receiver: 'info-slack'
+      repeat_interval: 12h
+
+receivers:
+  - name: 'default-slack'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#api-gateway-alerts'
+        title: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }} ({{ .Labels.severity }})
+          *Description:* {{ .Annotations.description }}
+          *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+          {{ end }}
+        send_resolved: true
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+
+  - name: 'critical-slack'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#api-gateway-critical'
+        title: 'CRITICAL: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Description:* {{ .Annotations.description }}
+          *Runbook:* {{ .Annotations.runbook_url }}
+          {{ end }}
+        send_resolved: true
+        color: 'danger'
+
+  - name: 'critical-pagerduty'
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY}'
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        severity: 'critical'
+
+  - name: 'security-slack'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#security-alerts'
+        title: 'Security: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }} ({{ .Labels.severity }})
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+        color: 'warning'
+
+  - name: 'info-slack'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#api-gateway-info'
+        title: 'Info: {{ .GroupLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true

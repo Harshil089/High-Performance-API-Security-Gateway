@@ -1,0 +1,125 @@
+{
+  "routes": [
+    {
+      "path": "/api/auth/*",
+      "backend": "http://auth-service:3001",
+      "rewrite": "/*",
+      "timeout": 10000,
+      "require_auth": false,
+      "strip_prefix": "/api/auth",
+      "rate_limit": {
+        "requests": 10,
+        "window": 60
+      }
+    },
+    {
+      "path": "/api/users/*",
+      "backends": [
+        "http://user-service-1:3002",
+        "http://user-service-2:3002",
+        "http://user-service-3:3002"
+      ],
+      "load_balancing": "round_robin",
+      "timeout": 5000,
+      "require_auth": true,
+      "strip_prefix": "/api",
+      "health_check": {
+        "enabled": true,
+        "path": "/health",
+        "interval": 10,
+        "timeout": 3,
+        "healthy_threshold": 2,
+        "unhealthy_threshold": 3
+      },
+      "circuit_breaker": {
+        "enabled": true,
+        "failure_threshold": 5,
+        "success_threshold": 2,
+        "timeout": 60
+      }
+    },
+    {
+      "path": "/api/products/*",
+      "backends": [
+        "http://product-service-1:3003",
+        "http://product-service-2:3003"
+      ],
+      "load_balancing": "round_robin",
+      "timeout": 5000,
+      "require_auth": false,
+      "strip_prefix": "/api",
+      "cache": {
+        "enabled": true,
+        "ttl": 600
+      },
+      "health_check": {
+        "enabled": true,
+        "path": "/health",
+        "interval": 10,
+        "timeout": 3
+      }
+    },
+    {
+      "path": "/api/orders/*",
+      "backends": [
+        "http://order-service:3004"
+      ],
+      "load_balancing": "round_robin",
+      "timeout": 15000,
+      "require_auth": true,
+      "strip_prefix": "/api",
+      "rate_limit": {
+        "requests": 100,
+        "window": 60
+      },
+      "circuit_breaker": {
+        "enabled": true,
+        "failure_threshold": 5,
+        "success_threshold": 2,
+        "timeout": 60
+      }
+    },
+    {
+      "path": "/api/payment/*",
+      "backends": [
+        "http://payment-service:3005"
+      ],
+      "timeout": 30000,
+      "require_auth": true,
+      "strip_prefix": "/api",
+      "rate_limit": {
+        "requests": 50,
+        "window": 60
+      },
+      "circuit_breaker": {
+        "enabled": true,
+        "failure_threshold": 3,
+        "success_threshold": 2,
+        "timeout": 120
+      }
+    },
+    {
+      "path": "/api/admin/*",
+      "backends": [
+        "http://admin-service:3006"
+      ],
+      "timeout": 10000,
+      "require_auth": true,
+      "strip_prefix": "/api",
+      "rate_limit": {
+        "requests": 30,
+        "window": 60
+      }
+    },
+    {
+      "path": "/health",
+      "handler": "health_check",
+      "require_auth": false
+    },
+    {
+      "path": "/ready",
+      "handler": "readiness_check",
+      "require_auth": false
+    }
+  ]
+}

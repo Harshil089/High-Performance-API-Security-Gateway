@@ -2,16 +2,20 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { calculateMetricsSummary } from "@/lib/prometheus";
 import { MetricsSummary } from "@/types/gateway";
+import { useIsMobile } from "./useIsMobile";
 
-export function useMetrics(refreshInterval = 5000) {
+export function useMetrics(refreshInterval?: number) {
+  const isMobile = useIsMobile();
+  const interval = refreshInterval ?? (isMobile ? 10000 : 5000);
+
   const query = useQuery({
     queryKey: ["metrics"],
     queryFn: async () => {
       const metricsText = await apiClient.get<string>("/api/metrics");
       return calculateMetricsSummary(metricsText);
     },
-    refetchInterval: refreshInterval,
-    staleTime: 1000, // Metrics are time-sensitive
+    refetchInterval: interval,
+    staleTime: 2000,
   });
 
   return {
@@ -22,11 +26,14 @@ export function useMetrics(refreshInterval = 5000) {
   };
 }
 
-export function useRawMetrics(refreshInterval = 5000) {
+export function useRawMetrics(refreshInterval?: number) {
+  const isMobile = useIsMobile();
+  const interval = refreshInterval ?? (isMobile ? 10000 : 5000);
+
   return useQuery({
     queryKey: ["raw-metrics"],
     queryFn: () => apiClient.get<string>("/api/metrics"),
-    refetchInterval: refreshInterval,
-    staleTime: 1000,
+    refetchInterval: interval,
+    staleTime: 2000,
   });
 }

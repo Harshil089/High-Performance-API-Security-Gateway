@@ -50,12 +50,12 @@ export default function SecurityPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 p-4 md:gap-6 md:p-6">
       {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Security Settings</h1>
-        <p className="text-muted-foreground">
-          Configure authentication, API keys, and IP filtering for your gateway
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Security Settings</h1>
+        <p className="text-sm md:text-base text-muted-foreground">
+          Configure authentication, API keys, and IP filtering
         </p>
       </div>
 
@@ -69,18 +69,21 @@ export default function SecurityPage() {
       {/* Content */}
       {!isLoading && (
         <Tabs defaultValue="jwt" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 max-w-2xl">
-            <TabsTrigger value="jwt" className="flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              JWT Authentication
+          <TabsList className="grid w-full grid-cols-3 md:max-w-2xl">
+            <TabsTrigger value="jwt" className="flex items-center gap-1.5 md:gap-2">
+              <Shield className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">JWT Authentication</span>
+              <span className="sm:hidden">JWT</span>
             </TabsTrigger>
-            <TabsTrigger value="apikeys" className="flex items-center gap-2">
-              <Key className="h-4 w-4" />
-              API Keys
+            <TabsTrigger value="apikeys" className="flex items-center gap-1.5 md:gap-2">
+              <Key className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">API Keys</span>
+              <span className="sm:hidden">Keys</span>
             </TabsTrigger>
-            <TabsTrigger value="ipfilter" className="flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              IP Filtering
+            <TabsTrigger value="ipfilter" className="flex items-center gap-1.5 md:gap-2">
+              <Filter className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">IP Filtering</span>
+              <span className="sm:hidden">IP Filter</span>
             </TabsTrigger>
           </TabsList>
 

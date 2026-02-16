@@ -1,11 +1,18 @@
 {
   "server": {
     "host": "0.0.0.0",
-    "port": 8080,
+    "port": 443,
     "tls": {
       "enabled": true,
-      "cert_file": "/etc/api-gateway/certs/server.crt",
-      "key_file": "/etc/api-gateway/certs/server.key"
+      "cert_file": "/app/certs/fullchain.pem",
+      "key_file": "/app/certs/server.key",
+      "min_tls_version": "1.2",
+      "cipher_suites": [
+        "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+      ]
     },
     "max_connections": 10000,
     "connection_timeout": 30,
@@ -13,12 +20,14 @@
     "max_body_size": 10485760
   },
   "jwt": {
-    "algorithm": "HS256",
+    "algorithm": "RS256",
     "secret": "${JWT_SECRET}",
     "issuer": "${JWT_ISSUER}",
     "audience": "${JWT_AUDIENCE}",
     "access_token_expiry": 900,
-    "refresh_token_expiry": 86400
+    "refresh_token_expiry": 86400,
+    "public_key_file": "/app/certs/jwt-public.pem",
+    "private_key_file": ""
   },
   "rate_limits": {
     "global": {
@@ -39,8 +48,16 @@
         "requests": 3,
         "window": 3600
       },
-      "/api/payment": {
+      "/api/auth/forgot-password": {
+        "requests": 3,
+        "window": 3600
+      },
+      "/api/payment/*": {
         "requests": 100,
+        "window": 60
+      },
+      "/api/admin/*": {
+        "requests": 30,
         "window": 60
       }
     }
@@ -55,23 +72,29 @@
   },
   "security": {
     "max_header_size": 8192,
+    "max_body_size": 10485760,
     "allowed_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     "cors": {
       "enabled": true,
       "allowed_origins": ["${CORS_ALLOWED_ORIGINS}"],
-      "allowed_headers": ["Authorization", "Content-Type", "X-Request-ID"],
+      "allowed_headers": ["Authorization", "Content-Type", "X-Request-ID", "X-API-Key"],
       "allowed_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-      "max_age": 3600,
+      "max_age": 86400,
       "allow_credentials": true
     },
     "headers": {
       "x_frame_options": "DENY",
       "x_content_type_options": "nosniff",
       "x_xss_protection": "1; mode=block",
-      "strict_transport_security": "max-age=31536000; includeSubDomains",
-      "content_security_policy": "default-src 'self'",
-      "referrer_policy": "strict-origin-when-cross-origin"
-    }
+      "strict_transport_security": "max-age=63072000; includeSubDomains; preload",
+      "content_security_policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+      "referrer_policy": "strict-origin-when-cross-origin",
+      "permissions_policy": "camera=(), microphone=(), geolocation=()",
+      "x_permitted_cross_domain_policies": "none"
+    },
+    "ip_whitelist": [],
+    "ip_blacklist": [],
+    "api_keys": {}
   },
   "backends": {
     "health_check_interval": 10,
@@ -86,5 +109,37 @@
       "backoff_multiplier": 2,
       "initial_delay_ms": 100
     }
+  },
+  "redis": {
+    "enabled": true,
+    "uri": "tcp://${REDIS_HOST}:${REDIS_PORT}",
+    "password": "${REDIS_PASSWORD}",
+    "db": 0,
+    "connection_pool_size": 20
+  },
+  "cache": {
+    "enabled": true,
+    "backend": "redis",
+    "default_ttl": 300,
+    "max_entry_size": 1048576,
+    "cacheable_methods": ["GET"],
+    "cacheable_status_codes": [200, 301, 302, 404],
+    "exclude_paths": ["/api/auth/*", "/admin/*", "/api/payment/*", "/health", "/metrics"],
+    "cache_control_respect": true
+  },
+  "metrics": {
+    "enabled": true,
+    "path": "/metrics"
+  },
+  "admin": {
+    "enabled": true,
+    "token": "${ADMIN_TOKEN}",
+    "allowed_ips": []
+  },
+  "websocket": {
+    "enabled": true,
+    "max_connections": 1000,
+    "ping_interval": 30,
+    "ping_timeout": 10
   }
 }

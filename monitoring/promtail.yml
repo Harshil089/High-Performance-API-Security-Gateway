@@ -1,0 +1,68 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    batchwait: 1s
+    batchsize: 1048576
+    timeout: 10s
+
+scrape_configs:
+  # API Gateway structured logs (JSON)
+  - job_name: api-gateway
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: api-gateway
+          environment: production
+          __path__: /var/log/api-gateway/*.log
+    pipeline_stages:
+      # Parse JSON log lines
+      - json:
+          expressions:
+            level: level
+            method: method
+            path: path
+            status: status
+            response_time_ms: response_time_ms
+            client_ip: client_ip
+            request_id: request_id
+            user_id: user_id
+            backend: backend
+
+      # Extract labels for efficient querying
+      - labels:
+          level:
+          method:
+          status:
+
+      # Create a structured log line
+      - output:
+          source: message
+
+      # Drop health check noise
+      - match:
+          selector: '{job="api-gateway"}'
+          stages:
+            - json:
+                expressions:
+                  path: path
+            - drop:
+                source: path
+                expression: "^/health$"
+                drop_counter_reason: health_check_noise
+
+  # System logs (optional)
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          environment: production
+          __path__: /var/log/host/syslog

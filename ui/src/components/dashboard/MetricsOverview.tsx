@@ -16,11 +16,11 @@ export function MetricsOverview() {
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[...Array(4)].map((_, i) => (
           <div
             key={i}
-            className="h-32 rounded-lg border bg-card animate-pulse"
+            className="h-24 md:h-32 rounded-lg border bg-card animate-pulse"
           />
         ))}
       </div>
@@ -47,7 +47,7 @@ export function MetricsOverview() {
     metrics.statusCodes["5xx"];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 md:gap-4 md:grid-cols-2 lg:grid-cols-4">
       <MetricsCard
         title="Total Requests"
         value={formatNumber(metrics.totalRequests)}
