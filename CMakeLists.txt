@@ -31,18 +31,27 @@ else()
     endif()
 endif()
 
-# Find hiredis and redis-plus-plus (installed via Dockerfile)
-find_library(HIREDIS_LIBRARY hiredis)
-find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
-find_library(REDIS_PLUS_PLUS_LIBRARY redis++ PATHS /usr/local/lib)
-find_path(REDIS_PLUS_PLUS_INCLUDE_DIR sw/redis++/redis++.h PATHS /usr/local/include)
+# Find hiredis and redis-plus-plus
+# Search Homebrew paths on macOS in addition to system defaults
+find_library(HIREDIS_LIBRARY hiredis PATHS /opt/homebrew/lib /usr/local/lib)
+find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h PATHS /opt/homebrew/include /usr/local/include)
+find_library(REDIS_PLUS_PLUS_LIBRARY redis++ PATHS /opt/homebrew/lib /usr/local/lib)
+find_path(REDIS_PLUS_PLUS_INCLUDE_DIR sw/redis++/redis++.h PATHS /opt/homebrew/include /usr/local/include)
 
-if(HIREDIS_LIBRARY AND REDIS_PLUS_PLUS_LIBRARY)
+if(HIREDIS_LIBRARY AND HIREDIS_INCLUDE_DIR)
     set(REDIS_AVAILABLE ON)
-    message(STATUS "Redis support enabled (hiredis + redis-plus-plus found)")
+    message(STATUS "Redis support enabled (hiredis found: ${HIREDIS_LIBRARY})")
+    if(REDIS_PLUS_PLUS_LIBRARY AND REDIS_PLUS_PLUS_INCLUDE_DIR)
+        set(REDIS_PLUS_PLUS_AVAILABLE ON)
+        message(STATUS "  redis-plus-plus found: ${REDIS_PLUS_PLUS_LIBRARY}")
+    else()
+        set(REDIS_PLUS_PLUS_AVAILABLE OFF)
+        message(STATUS "  redis-plus-plus not found (RedisCache/RedisRateLimiter disabled)")
+    endif()
 else()
     set(REDIS_AVAILABLE OFF)
-    message(STATUS "Redis support disabled (hiredis or redis-plus-plus not found)")
+    set(REDIS_PLUS_PLUS_AVAILABLE OFF)
+    message(STATUS "Redis support disabled (hiredis not found)")
 endif()
 
 # External dependencies via FetchContent
@@ -117,8 +126,8 @@ set(GATEWAY_SOURCES
     src/metrics/SimpleMetrics.cpp
 )
 
-# Add Redis source files if available
-if(REDIS_AVAILABLE)
+# Add Redis source files if redis-plus-plus available
+if(REDIS_PLUS_PLUS_AVAILABLE)
     list(APPEND GATEWAY_SOURCES
         src/cache/RedisCache.cpp
         src/rate_limiter/RedisRateLimiter.cpp
@@ -133,7 +142,11 @@ target_compile_definitions(api-gateway PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT=1)
 
 if(REDIS_AVAILABLE)
     target_compile_definitions(api-gateway PRIVATE REDIS_AVAILABLE=1)
-    target_include_directories(api-gateway PRIVATE ${HIREDIS_INCLUDE_DIR} ${REDIS_PLUS_PLUS_INCLUDE_DIR})
+    target_include_directories(api-gateway PRIVATE ${HIREDIS_INCLUDE_DIR})
+endif()
+if(REDIS_PLUS_PLUS_AVAILABLE)
+    target_compile_definitions(api-gateway PRIVATE REDIS_PLUS_PLUS_AVAILABLE=1)
+    target_include_directories(api-gateway PRIVATE ${REDIS_PLUS_PLUS_INCLUDE_DIR})
 endif()
 
 target_link_libraries(api-gateway
@@ -150,7 +163,10 @@ if(NOT APPLE AND UUID_LIBRARY)
 endif()
 
 if(REDIS_AVAILABLE)
-    target_link_libraries(api-gateway PRIVATE ${HIREDIS_LIBRARY} ${REDIS_PLUS_PLUS_LIBRARY})
+    target_link_libraries(api-gateway PRIVATE ${HIREDIS_LIBRARY})
+endif()
+if(REDIS_PLUS_PLUS_AVAILABLE)
+    target_link_libraries(api-gateway PRIVATE ${REDIS_PLUS_PLUS_LIBRARY})
 endif()
 
 # Enable testing

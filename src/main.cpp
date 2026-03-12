@@ -15,7 +15,7 @@
 #include "logging/Logger.h"
 #include "config/ConfigManager.h"
 #include "admin/AdminAPI.h"
-#ifdef REDIS_AVAILABLE
+#ifdef REDIS_PLUS_PLUS_AVAILABLE
 #include "cache/RedisCache.h"
 #include "rate_limiter/RedisRateLimiter.h"
 #endif
@@ -74,12 +74,16 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--routes" && i + 1 < argc) {
             routes_file = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: " << argv[0] << " [options]\n"
+            std::cout << "Usage: " << argv[0] << " [options] [config-file]\n"
                       << "Options:\n"
                       << "  --config <file>  Path to gateway config (default: config/gateway.json)\n"
                       << "  --routes <file>  Path to routes config (default: config/routes.json)\n"
-                      << "  --help, -h       Show this help message\n";
+                      << "  --help, -h       Show this help message\n"
+                      << "\nA bare positional argument is treated as the config file path.\n";
             return 0;
+        } else if (arg[0] != '-') {
+            // Bare positional argument → treat as config file
+            config_file = arg;
         }
     }
 
@@ -457,7 +461,7 @@ int main(int argc, char* argv[]) {
         server->initialize(jwt_manager, rate_limiter, router, security_validator, logger, proxy_manager);
 
         // ── Redis Cache + Distributed Rate Limiter (Task 3) ──────────
-#ifdef REDIS_AVAILABLE
+#ifdef REDIS_PLUS_PLUS_AVAILABLE
         bool redis_enabled = config.contains("redis") && config["redis"].value("enabled", false);
         bool cache_enabled = config.contains("cache") && config["cache"].value("enabled", false);
 
