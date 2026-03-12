@@ -192,7 +192,7 @@ std::string SecurityValidator::maskSensitiveData(const std::string& input) {
     result = std::regex_replace(result, auth_regex, "$1***MASKED***");
 
     // Mask password fields
-    std::regex password_regex(R"(("password"\s*:\s*")[^"]*(")", std::regex::icase);
+    std::regex password_regex(R"RE(("password"\s*:\s*")[^"]*(")\s*)RE", std::regex::icase);
     result = std::regex_replace(result, password_regex, "$1***$2");
 
     // Mask credit card numbers (basic pattern)
@@ -200,7 +200,7 @@ std::string SecurityValidator::maskSensitiveData(const std::string& input) {
     result = std::regex_replace(result, cc_regex, "****-****-****-****");
 
     // Mask API keys (common patterns)
-    std::regex api_key_regex(R"(("api[_-]?key"\s*:\s*")[^"]*(")", std::regex::icase);
+    std::regex api_key_regex(R"RE(("api[_-]?key"\s*:\s*")[^"]*(")\s*)RE", std::regex::icase);
     result = std::regex_replace(result, api_key_regex, "$1***$2");
 
     return result;
@@ -209,12 +209,30 @@ std::string SecurityValidator::maskSensitiveData(const std::string& input) {
 bool SecurityValidator::allowConnection(const std::string& client_ip) {
     std::lock_guard<std::mutex> lock(connection_mutex_);
 
+    // Periodically clean stale entries (IPs inactive for >5 minutes)
+    auto now = std::chrono::steady_clock::now();
+    if (connection_count_.size() > 1000) {
+        for (auto it = connection_count_.begin(); it != connection_count_.end();) {
+            auto seen_it = connection_last_seen_.find(it->first);
+            if (seen_it != connection_last_seen_.end()) {
+                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - seen_it->second).count();
+                if (elapsed > 300) {
+                    connection_last_seen_.erase(seen_it);
+                    it = connection_count_.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+        }
+    }
+
     int& count = connection_count_[client_ip];
     if (count >= max_connections_per_ip_) {
         return false;
     }
 
     count++;
+    connection_last_seen_[client_ip] = now;
     return true;
 }
 
@@ -228,6 +246,7 @@ void SecurityValidator::releaseConnection(const std::string& client_ip) {
         // Remove entry if count is 0
         if (it->second == 0) {
             connection_count_.erase(it);
+            connection_last_seen_.erase(client_ip);
         }
     }
 }

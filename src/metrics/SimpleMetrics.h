@@ -24,6 +24,10 @@ public:
     void incrementAuthSuccess() { auth_success_++; }
     void incrementAuthFailure() { auth_failures_++; }
 
+    // Cache metrics
+    void incrementCacheHits() { cache_hits_++; }
+    void incrementCacheMisses() { cache_misses_++; }
+
     // Rate limiting metrics
     void incrementRateLimitHits() { rate_limit_hits_++; }
     void incrementRateLimitAllowed() { rate_limit_allowed_++; }
@@ -48,6 +52,8 @@ private:
     std::atomic<uint64_t> total_requests_{0};
     std::atomic<uint64_t> auth_success_{0};
     std::atomic<uint64_t> auth_failures_{0};
+    std::atomic<uint64_t> cache_hits_{0};
+    std::atomic<uint64_t> cache_misses_{0};
     std::atomic<uint64_t> rate_limit_hits_{0};
     std::atomic<uint64_t> rate_limit_allowed_{0};
     std::atomic<uint64_t> total_connections_{0};

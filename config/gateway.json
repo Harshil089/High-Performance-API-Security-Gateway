@@ -110,6 +110,7 @@
   },
   "websocket": {
     "enabled": false,
+    "port": 8081,
     "max_connections": 100,
     "ping_interval": 30,
     "ping_timeout": 10

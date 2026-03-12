@@ -6,6 +6,7 @@
 #include <map>
 #include <vector>
 #include <optional>
+#include <atomic>
 #include <httplib.h>
 #include "../auth/JWTManager.h"
 #include "../rate_limiter/RateLimiter.h"
@@ -81,8 +82,12 @@ public:
      * @brief Enable TLS/SSL
      * @param cert_file Path to certificate file
      * @param key_file Path to private key file
+     * @param cipher_list Colon-separated OpenSSL cipher string (optional)
+     * @param min_tls_version Minimum TLS version: "1.2" or "1.3" (default: "1.2")
      */
-    void enableTLS(const std::string& cert_file, const std::string& key_file);
+    void enableTLS(const std::string& cert_file, const std::string& key_file,
+                   const std::string& cipher_list = "",
+                   const std::string& min_tls_version = "1.2");
 
     /**
      * @brief Set security headers configuration
@@ -158,6 +163,8 @@ private:
     int cache_ttl_ = 300;
 
     DistributedRateLimitFn distributed_rate_limiter_;
+
+    std::atomic<int> active_connections_{0};
 
     /**
      * @brief Setup request handlers

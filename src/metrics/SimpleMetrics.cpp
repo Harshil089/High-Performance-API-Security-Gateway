@@ -61,7 +61,18 @@ std::string SimpleMetrics::exportMetrics() {
 
     ss << "# HELP gateway_auth_failures_total Total failed authentications\n";
     ss << "# TYPE gateway_auth_failures_total counter\n";
-    ss << "gateway_auth_failures_total " << auth_failures_ << "\n\n";
+    ss << "gateway_auth_failures_total " << auth_failures_ << "\n";
+    // Alias for UI compatibility (singular form)
+    ss << "gateway_auth_failure_total " << auth_failures_ << "\n\n";
+
+    // Cache metrics
+    ss << "# HELP gateway_cache_hits_total Total cache hits\n";
+    ss << "# TYPE gateway_cache_hits_total counter\n";
+    ss << "gateway_cache_hits_total " << cache_hits_ << "\n\n";
+
+    ss << "# HELP gateway_cache_misses_total Total cache misses\n";
+    ss << "# TYPE gateway_cache_misses_total counter\n";
+    ss << "gateway_cache_misses_total " << cache_misses_ << "\n\n";
 
     // Rate limit metrics
     ss << "# HELP gateway_rate_limit_hits_total Total rate limit hits\n";
@@ -133,11 +144,11 @@ std::string SimpleMetrics::exportMetrics() {
     }
 
     if (!backend_latency_.empty()) {
-        ss << "# HELP gateway_backend_latency_ms Average backend latency in milliseconds\n";
-        ss << "# TYPE gateway_backend_latency_ms gauge\n";
+        ss << "# HELP gateway_backend_latency_seconds Average backend latency in seconds\n";
+        ss << "# TYPE gateway_backend_latency_seconds gauge\n";
         for (const auto& entry : backend_latency_) {
-            ss << "gateway_backend_latency_ms{backend=\"" << entry.first << "\"} "
-               << std::fixed << std::setprecision(2) << entry.second << "\n";
+            ss << "gateway_backend_latency_seconds{backend=\"" << entry.first << "\"} "
+               << std::fixed << std::setprecision(6) << (entry.second / 1000.0) << "\n";
         }
         ss << "\n";
     }

@@ -5,6 +5,7 @@
 #include <set>
 #include <map>
 #include <mutex>
+#include <chrono>
 
 namespace gateway {
 
@@ -158,6 +159,7 @@ private:
 
     std::set<std::string> allowed_methods_;
     std::map<std::string, int> connection_count_;
+    std::map<std::string, std::chrono::steady_clock::time_point> connection_last_seen_;
     std::mutex connection_mutex_;
 
     std::vector<std::string> sql_injection_patterns_;

@@ -10,6 +10,7 @@
 #include "rate_limiter/RateLimiter.h"
 #include "router/Router.h"
 #include "router/ProxyManager.h"
+#include "router/WebSocketProxy.h"
 #include "security/SecurityValidator.h"
 #include "logging/Logger.h"
 #include "config/ConfigManager.h"
@@ -309,8 +310,24 @@ int main(int argc, char* argv[]) {
         if (config["server"]["tls"]["enabled"].get<bool>()) {
             std::string cert_file = config["server"]["tls"]["cert_file"].get<std::string>();
             std::string key_file_tls = config["server"]["tls"]["key_file"].get<std::string>();
-            server->enableTLS(cert_file, key_file_tls);
-            std::cout << "  ✓ TLS/SSL enabled\n";
+
+            // Build cipher list from config (colon-separated for OpenSSL)
+            std::string cipher_list;
+            if (config["server"]["tls"].contains("cipher_suites") &&
+                config["server"]["tls"]["cipher_suites"].is_array()) {
+                for (const auto& cs : config["server"]["tls"]["cipher_suites"]) {
+                    if (!cipher_list.empty()) cipher_list += ":";
+                    cipher_list += cs.get<std::string>();
+                }
+            }
+
+            std::string min_tls = config["server"]["tls"].value("min_tls_version", std::string("1.2"));
+
+            server->enableTLS(cert_file, key_file_tls, cipher_list, min_tls);
+            std::cout << "  ✓ TLS/SSL enabled";
+            if (!cipher_list.empty()) std::cout << " (custom ciphers)";
+            if (min_tls == "1.3") std::cout << " (TLS 1.3+)";
+            std::cout << "\n";
         }
 
         // ── Admin API — register BEFORE initialize() so routes are added
@@ -619,6 +636,27 @@ int main(int argc, char* argv[]) {
 
         g_server = server;
 
+        // ── WebSocket proxy (separate listener) ──────────────────────
+        std::shared_ptr<WebSocketProxy> ws_proxy;
+        if (config.contains("websocket") && config["websocket"].value("enabled", false)) {
+            int ws_port = config["websocket"].value("port", 8081);
+            ws_proxy = std::make_shared<WebSocketProxy>();
+
+            // Build a route resolver that maps paths to backend URLs
+            auto ws_router = router; // capture for lambda
+            auto resolver = [ws_router](const std::string& path) -> std::string {
+                auto match = ws_router->matchRoute(path);
+                if (match.has_value() && match->route) return match->backend_url;
+                return "";
+            };
+
+            if (ws_proxy->startListener(host, ws_port, resolver)) {
+                std::cout << "  ✓ WebSocket proxy listening on port " << ws_port << "\n";
+            } else {
+                std::cerr << "  ✗ WebSocket proxy failed to start on port " << ws_port << "\n";
+            }
+        }
+
         // ── Background health check thread ───────────────────────────
         int health_check_interval = config.contains("backends") ? config["backends"].value("health_check_interval", 10) : 10;
         auto backend_urls = router->getAllBackendUrls();
@@ -655,8 +693,12 @@ int main(int argc, char* argv[]) {
         if (!server->start()) {
             std::cerr << "Failed to start server\n";
             g_running = false;
+            if (ws_proxy) ws_proxy->stopListener();
             return 1;
         }
+
+        // Clean up WebSocket proxy on exit
+        if (ws_proxy) ws_proxy->stopListener();
 
     } catch (const std::exception& e) {
         std::cerr << "Fatal error: " << e.what() << "\n";

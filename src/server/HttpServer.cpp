@@ -4,6 +4,7 @@
 #include <uuid/uuid.h>
 #include <iostream>
 #include <chrono>
+#include <openssl/ssl.h>
 
 namespace gateway {
 
@@ -58,7 +59,8 @@ void HttpServer::stop() {
     }
 }
 
-void HttpServer::enableTLS(const std::string& cert_file, const std::string& key_file) {
+void HttpServer::enableTLS(const std::string& cert_file, const std::string& key_file,
+                           const std::string& cipher_list, const std::string& min_tls_version) {
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
     // Replace the plain Server with an SSLServer.
     // Must be called BEFORE initialize() / registerEndpoints().
@@ -66,9 +68,32 @@ void HttpServer::enableTLS(const std::string& cert_file, const std::string& key_
     tls_enabled_ = true;
     cert_file_ = cert_file;
     key_file_ = key_file;
+
+    // Configure TLS settings on the SSL context
+    auto* ssl_server = dynamic_cast<httplib::SSLServer*>(server_.get());
+    if (ssl_server) {
+        SSL_CTX* ctx = ssl_server->ssl_context();
+        if (ctx) {
+            // Set minimum TLS version
+            if (min_tls_version == "1.3") {
+                SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION);
+            } else {
+                SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+            }
+
+            // Set cipher suites if provided
+            if (!cipher_list.empty()) {
+                if (!SSL_CTX_set_cipher_list(ctx, cipher_list.c_str())) {
+                    std::cerr << "Warning: Failed to set cipher list: " << cipher_list << "\n";
+                }
+            }
+        }
+    }
 #else
     (void)cert_file;
     (void)key_file;
+    (void)cipher_list;
+    (void)min_tls_version;
     std::cerr << "TLS requested but CPPHTTPLIB_OPENSSL_SUPPORT is not compiled in\n";
 #endif
 }
@@ -243,6 +268,48 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
         return;
     }
 
+    // Global concurrent connection limit
+    if (active_connections_.fetch_add(1) >= max_connections_) {
+        active_connections_--;
+        res.status = StatusCode::SERVICE_UNAVAILABLE;
+        res.set_content(ResponseBuilder::errorJson("Server at maximum capacity"), "application/json");
+
+        auto end_time = std::chrono::steady_clock::now();
+        auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            end_time - start_time
+        ).count();
+
+        logRequest(request_id, client_ip, req.method, req.path, res.status,
+                  response_time, user_id, "", "Global connection limit exceeded");
+        return;
+    }
+    // RAII guard: decrement global counter when handler exits
+    struct GlobalConnGuard {
+        std::atomic<int>* counter;
+        ~GlobalConnGuard() { (*counter)--; }
+    } global_guard{&active_connections_};
+
+    // Per-IP concurrent request limit
+    if (!security_validator_->allowConnection(client_ip)) {
+        res.status = StatusCode::TOO_MANY_REQUESTS;
+        res.set_content(ResponseBuilder::errorJson("Too many concurrent requests from this IP"), "application/json");
+
+        auto end_time = std::chrono::steady_clock::now();
+        auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            end_time - start_time
+        ).count();
+
+        logRequest(request_id, client_ip, req.method, req.path, res.status,
+                  response_time, user_id, "", "Per-IP connection limit exceeded");
+        return;
+    }
+    // RAII guard: release connection count when handler exits
+    struct ConnectionGuard {
+        SecurityValidator* validator;
+        std::string ip;
+        ~ConnectionGuard() { validator->releaseConnection(ip); }
+    } conn_guard{security_validator_.get(), client_ip};
+
     // Validate HTTP method
     auto method_validation = security_validator_->validateMethod(req.method);
     if (!method_validation.valid) {
@@ -381,11 +448,15 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
         return;
     }
 
-    // Check cache for GET requests
+    // Check cache for GET requests (respecting Cache-Control directives)
     std::string cache_key = req.method + ":" + req.path;
-    if (req.method == "GET" && cache_get_) {
+    std::string req_cache_control = req.get_header_value("Cache-Control");
+    bool skip_cache = req_cache_control.find("no-cache") != std::string::npos ||
+                      req_cache_control.find("no-store") != std::string::npos;
+    if (req.method == "GET" && cache_get_ && !skip_cache) {
         auto cached = cache_get_(cache_key);
         if (cached) {
+            metrics_->incrementCacheHits();
             res.status = cached->status_code;
             res.set_content(cached->body, cached->content_type.c_str());
             res.set_header("X-Cache", "HIT");
@@ -401,6 +472,7 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
                       response_time, user_id, "cache", "");
             return;
         }
+        metrics_->incrementCacheMisses();
     }
 
     // Proxy to backend (use shared ProxyManager to preserve circuit breaker state)
@@ -422,13 +494,27 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
             res.set_header(key.c_str(), value.c_str());
         }
 
-        // Store in cache for successful GET responses
+        // Store in cache for successful GET responses (respecting Cache-Control)
         if (req.method == "GET" && cache_set_ && proxy_response.status_code == 200) {
-            CachedResponse to_cache;
-            to_cache.body = proxy_response.body;
-            to_cache.content_type = "application/json";
-            to_cache.status_code = proxy_response.status_code;
-            cache_set_(cache_key, to_cache, cache_ttl_);
+            // Check response Cache-Control directives
+            std::string resp_cc;
+            auto cc_it = proxy_response.headers.find("Cache-Control");
+            if (cc_it == proxy_response.headers.end())
+                cc_it = proxy_response.headers.find("cache-control");
+            if (cc_it != proxy_response.headers.end())
+                resp_cc = cc_it->second;
+
+            bool cacheable = resp_cc.find("no-store") == std::string::npos &&
+                             resp_cc.find("no-cache") == std::string::npos &&
+                             resp_cc.find("private") == std::string::npos;
+
+            if (cacheable) {
+                CachedResponse to_cache;
+                to_cache.body = proxy_response.body;
+                to_cache.content_type = "application/json";
+                to_cache.status_code = proxy_response.status_code;
+                cache_set_(cache_key, to_cache, cache_ttl_);
+            }
             res.set_header("X-Cache", "MISS");
         }
     } else {

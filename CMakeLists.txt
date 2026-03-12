@@ -20,9 +20,15 @@ find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 
 # Find UUID library
-find_library(UUID_LIBRARY uuid REQUIRED)
-if(NOT UUID_LIBRARY)
-    message(FATAL_ERROR "UUID library not found")
+# On macOS/Apple, uuid functions are part of the system library — no separate lib needed.
+if(APPLE)
+    set(UUID_LIBRARY "")
+    message(STATUS "UUID: using system framework (Apple)")
+else()
+    find_library(UUID_LIBRARY uuid REQUIRED)
+    if(NOT UUID_LIBRARY)
+        message(FATAL_ERROR "UUID library not found")
+    endif()
 endif()
 
 # Find hiredis and redis-plus-plus (installed via Dockerfile)
@@ -138,8 +144,10 @@ target_link_libraries(api-gateway
         nlohmann_json::nlohmann_json
         jwt-cpp::jwt-cpp
         spdlog::spdlog
-        ${UUID_LIBRARY}
 )
+if(NOT APPLE AND UUID_LIBRARY)
+    target_link_libraries(api-gateway PRIVATE ${UUID_LIBRARY})
+endif()
 
 if(REDIS_AVAILABLE)
     target_link_libraries(api-gateway PRIVATE ${HIREDIS_LIBRARY} ${REDIS_PLUS_PLUS_LIBRARY})
