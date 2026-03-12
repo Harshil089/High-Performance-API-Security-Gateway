@@ -59,9 +59,18 @@ void HttpServer::stop() {
 }
 
 void HttpServer::enableTLS(const std::string& cert_file, const std::string& key_file) {
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+    // Replace the plain Server with an SSLServer.
+    // Must be called BEFORE initialize() / registerEndpoints().
+    server_ = std::make_unique<httplib::SSLServer>(cert_file.c_str(), key_file.c_str());
     tls_enabled_ = true;
     cert_file_ = cert_file;
     key_file_ = key_file;
+#else
+    (void)cert_file;
+    (void)key_file;
+    std::cerr << "TLS requested but CPPHTTPLIB_OPENSSL_SUPPORT is not compiled in\n";
+#endif
 }
 
 void HttpServer::setSecurityHeaders(const std::map<std::string, std::string>& headers) {

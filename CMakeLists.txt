@@ -122,6 +122,9 @@ endif()
 # Main executable
 add_executable(api-gateway ${GATEWAY_SOURCES})
 
+# Enable httplib SSL support so httplib::SSLServer is available
+target_compile_definitions(api-gateway PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT=1)
+
 if(REDIS_AVAILABLE)
     target_compile_definitions(api-gateway PRIVATE REDIS_AVAILABLE=1)
     target_include_directories(api-gateway PRIVATE ${HIREDIS_INCLUDE_DIR} ${REDIS_PLUS_PLUS_INCLUDE_DIR})

@@ -305,6 +305,14 @@ int main(int argc, char* argv[]) {
         // HTTP Server
         auto server = std::make_shared<HttpServer>(host, port, max_connections);
 
+        // Enable TLS BEFORE registering any handlers (SSLServer must exist first)
+        if (config["server"]["tls"]["enabled"].get<bool>()) {
+            std::string cert_file = config["server"]["tls"]["cert_file"].get<std::string>();
+            std::string key_file_tls = config["server"]["tls"]["key_file"].get<std::string>();
+            server->enableTLS(cert_file, key_file_tls);
+            std::cout << "  ✓ TLS/SSL enabled\n";
+        }
+
         // ── Admin API — register BEFORE initialize() so routes are added
         //    before the catch-all ".*" handler ─────────────────────────
         std::shared_ptr<AdminAPI> admin_api;
@@ -562,14 +570,6 @@ int main(int argc, char* argv[]) {
 
             server->setCORS(cors);
             std::cout << "  ✓ CORS enabled (" << cors.allowed_origins.size() << " origins)\n";
-        }
-
-        // Enable TLS if configured
-        if (config["server"]["tls"]["enabled"].get<bool>()) {
-            std::string cert_file = config["server"]["tls"]["cert_file"].get<std::string>();
-            std::string key_file = config["server"]["tls"]["key_file"].get<std::string>();
-            server->enableTLS(cert_file, key_file);
-            std::cout << "  ✓ TLS/SSL enabled\n";
         }
 
         std::cout << "  ✓ HTTP Server initialized\n\n";
