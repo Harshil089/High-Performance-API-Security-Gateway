@@ -320,11 +320,105 @@ int main(int argc, char* argv[]) {
             admin_api->registerEndpoints(server->getInternalServer(), admin_token);
             admin_api->setCurrentConfig(config);
 
+            // Wire config update callback — dispatches live config changes
+            // to the actual gateway components
+            admin_api->setConfigUpdateCallback(
+                [rate_limiter, security_validator, server](const json& new_config) {
+
+                // ── Rate limits ──────────────────────────────────────
+                if (new_config.contains("rate_limits")) {
+                    auto& rl = new_config["rate_limits"];
+                    if (rl.contains("global") && rl["global"].contains("requests") && rl["global"].contains("window")) {
+                        rate_limiter->setGlobalLimit(
+                            rl["global"]["requests"].get<int>(),
+                            rl["global"]["window"].get<int>());
+                    }
+                    if (rl.contains("per_ip") && rl["per_ip"].contains("requests") && rl["per_ip"].contains("window")) {
+                        rate_limiter->setPerIPLimit(
+                            rl["per_ip"]["requests"].get<int>(),
+                            rl["per_ip"]["window"].get<int>());
+                    }
+                    if (rl.contains("endpoints") && rl["endpoints"].is_object()) {
+                        for (auto& [ep, lim] : rl["endpoints"].items()) {
+                            rate_limiter->setEndpointLimit(
+                                ep, lim["requests"].get<int>(), lim["window"].get<int>());
+                        }
+                    }
+                    if (rl.contains("per_ip_connections")) {
+                        security_validator->setMaxConnectionsPerIP(rl["per_ip_connections"].get<int>());
+                    }
+                    std::cout << "Admin: Rate limits updated\n";
+                }
+
+                // ── Security settings ────────────────────────────────
+                if (new_config.contains("security")) {
+                    auto& sec = new_config["security"];
+                    if (sec.contains("allowed_methods") && sec["allowed_methods"].is_array()) {
+                        std::vector<std::string> methods = sec["allowed_methods"];
+                        security_validator->setAllowedMethods(methods);
+                    }
+                    if (sec.contains("ip_whitelist") && sec["ip_whitelist"].is_array()) {
+                        std::vector<std::string> wl = sec["ip_whitelist"];
+                        security_validator->setIPWhitelist(wl);
+                    }
+                    if (sec.contains("ip_blacklist") && sec["ip_blacklist"].is_array()) {
+                        std::vector<std::string> bl = sec["ip_blacklist"];
+                        security_validator->setIPBlacklist(bl);
+                    }
+                    if (sec.contains("api_keys") && sec["api_keys"].is_object()) {
+                        std::map<std::string, std::string> keys;
+                        for (auto& [k, v] : sec["api_keys"].items()) {
+                            keys[k] = v.get<std::string>();
+                        }
+                        security_validator->setAPIKeys(keys);
+                    }
+                    // Security headers
+                    if (sec.contains("headers") && sec["headers"].is_object()) {
+                        std::map<std::string, std::string> hdrs;
+                        for (auto& [k, v] : sec["headers"].items()) {
+                            std::string name = k;
+                            for (size_t i = 0; i < name.length(); i++) {
+                                if (name[i] == '_') {
+                                    name[i] = '-';
+                                    if (i + 1 < name.length()) name[i + 1] = toupper(name[i + 1]);
+                                } else if (i == 0) {
+                                    name[i] = toupper(name[i]);
+                                }
+                            }
+                            hdrs[name] = v.get<std::string>();
+                        }
+                        server->setSecurityHeaders(hdrs);
+                    }
+                    // CORS
+                    if (sec.contains("cors") && sec["cors"].is_object()) {
+                        HttpServer::CORSConfig cors;
+                        cors.enabled = sec["cors"].value("enabled", false);
+                        if (cors.enabled) {
+                            if (sec["cors"].contains("allowed_origins")) {
+                                for (const auto& o : sec["cors"]["allowed_origins"])
+                                    cors.allowed_origins.push_back(o.get<std::string>());
+                            }
+                            if (sec["cors"].contains("allowed_methods")) {
+                                for (const auto& m : sec["cors"]["allowed_methods"])
+                                    cors.allowed_methods.push_back(m.get<std::string>());
+                            }
+                            if (sec["cors"].contains("allowed_headers")) {
+                                for (const auto& h : sec["cors"]["allowed_headers"])
+                                    cors.allowed_headers.push_back(h.get<std::string>());
+                            }
+                            cors.max_age = sec["cors"].value("max_age", 3600);
+                            cors.allow_credentials = sec["cors"].value("allow_credentials", false);
+                        }
+                        server->setCORS(cors);
+                    }
+                    std::cout << "Admin: Security settings updated\n";
+                }
+            });
+
             // Wire rate limit reset callback
             admin_api->setRateLimitResetCallback([rate_limiter](const std::string& key) {
-                (void)rate_limiter;
-                (void)key;
-                std::cout << "Admin: Rate limit reset requested for key: " << key << std::endl;
+                rate_limiter->resetBucket(key);
+                std::cout << "Admin: Rate limit reset for key: " << key << std::endl;
             });
 
             admin_api->setRouter(router);
