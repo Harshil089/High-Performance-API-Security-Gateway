@@ -539,7 +539,7 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
               proxy_response.success ? "" : proxy_response.error);
 }
 
-void HttpServer::handleHealthCheck(const httplib::Request& req, httplib::Response& res) {
+void HttpServer::handleHealthCheck(const httplib::Request& /* req */, httplib::Response& res) {
     // Add security headers
     addSecurityHeaders(res);
 
@@ -567,7 +567,7 @@ void HttpServer::handleHealthCheck(const httplib::Request& req, httplib::Respons
     res.set_content(health_response, "application/json");
 }
 
-void HttpServer::handleMetrics(const httplib::Request& req, httplib::Response& res) {
+void HttpServer::handleMetrics(const httplib::Request& /* req */, httplib::Response& res) {
     res.status = 200;
     res.set_content(metrics_->exportMetrics(), "text/plain; version=0.0.4; charset=utf-8");
 }

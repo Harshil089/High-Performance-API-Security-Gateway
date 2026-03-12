@@ -27,7 +27,7 @@ using json = nlohmann::json;
 std::shared_ptr<HttpServer> g_server;
 std::atomic<bool> g_running{true};
 
-void signalHandler(int signal) {
+void signalHandler(int /* signal */) {
     g_running = false;
     if (g_server) {
         std::cout << "\nShutting down API Gateway...\n";

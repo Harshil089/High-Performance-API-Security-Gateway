@@ -105,7 +105,7 @@ ValidationResult SecurityValidator::validateHeaders(
 
 ValidationResult SecurityValidator::validateBody(
     const std::string& body,
-    const std::string& content_type
+    const std::string& /* content_type */
 ) {
     // Check body size
     if (body.size() > max_body_size_) {

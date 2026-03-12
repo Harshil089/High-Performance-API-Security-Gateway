@@ -120,7 +120,7 @@ std::shared_ptr<TokenBucket> RateLimiter::getBucket(
     return bucket;
 }
 
-void RateLimiter::refillBucket(TokenBucket& bucket, const RateLimitConfig& config) {
+void RateLimiter::refillBucket(TokenBucket& bucket, const RateLimitConfig& /* config */) {
     std::lock_guard<std::mutex> lock(bucket.mtx);
 
     auto now = std::chrono::steady_clock::now();
