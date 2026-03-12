@@ -68,6 +68,34 @@ void HttpServer::setSecurityHeaders(const std::map<std::string, std::string>& he
     security_headers_ = headers;
 }
 
+void HttpServer::setCORS(const CORSConfig& cors_config) {
+    cors_config_ = cors_config;
+}
+
+bool HttpServer::isOriginAllowed(const std::string& origin) const {
+    if (origin.empty()) return false;
+    for (const auto& allowed : cors_config_.allowed_origins) {
+        if (allowed == "*" || allowed == origin) return true;
+    }
+    return false;
+}
+
+void HttpServer::addCORSHeaders(const httplib::Request& req, httplib::Response& res) {
+    if (!cors_config_.enabled) return;
+
+    std::string origin = req.get_header_value("Origin");
+    if (!isOriginAllowed(origin)) return;
+
+    res.set_header("Access-Control-Allow-Origin", origin);
+
+    if (cors_config_.allow_credentials) {
+        res.set_header("Access-Control-Allow-Credentials", "true");
+    }
+
+    // Vary header so caches know the response depends on Origin
+    res.set_header("Vary", "Origin");
+}
+
 void HttpServer::addSecurityHeaders(httplib::Response& res) {
     for (const auto& header_pair : security_headers_) {
         res.set_header(header_pair.first, header_pair.second);
@@ -110,7 +138,38 @@ void HttpServer::setupHandlers() {
         // Add security headers
         addSecurityHeaders(res);
 
-        // CORS preflight - will be set by main.cpp based on config
+        // CORS preflight
+        if (cors_config_.enabled) {
+            std::string origin = req.get_header_value("Origin");
+            if (isOriginAllowed(origin)) {
+                res.set_header("Access-Control-Allow-Origin", origin);
+
+                // Join allowed methods
+                std::string methods;
+                for (size_t i = 0; i < cors_config_.allowed_methods.size(); i++) {
+                    if (i > 0) methods += ", ";
+                    methods += cors_config_.allowed_methods[i];
+                }
+                res.set_header("Access-Control-Allow-Methods", methods);
+
+                // Join allowed headers
+                std::string headers;
+                for (size_t i = 0; i < cors_config_.allowed_headers.size(); i++) {
+                    if (i > 0) headers += ", ";
+                    headers += cors_config_.allowed_headers[i];
+                }
+                res.set_header("Access-Control-Allow-Headers", headers);
+
+                res.set_header("Access-Control-Max-Age", std::to_string(cors_config_.max_age));
+
+                if (cors_config_.allow_credentials) {
+                    res.set_header("Access-Control-Allow-Credentials", "true");
+                }
+
+                res.set_header("Vary", "Origin");
+            }
+        }
+
         res.status = 204;
     });
 }
@@ -124,6 +183,9 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
 
     // Add security headers to all responses
     addSecurityHeaders(res);
+
+    // Add CORS headers to all responses
+    addCORSHeaders(req, res);
 
     // Add X-Request-ID to response
     res.set_header("X-Request-ID", request_id);

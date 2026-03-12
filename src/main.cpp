@@ -438,7 +438,23 @@ int main(int argc, char* argv[]) {
 
         // Configure CORS
         if (config["security"]["cors"]["enabled"].get<bool>()) {
-            std::cout << "  ✓ CORS enabled\n";
+            HttpServer::CORSConfig cors;
+            cors.enabled = true;
+
+            for (const auto& origin : config["security"]["cors"]["allowed_origins"]) {
+                cors.allowed_origins.push_back(origin.get<std::string>());
+            }
+            for (const auto& method : config["security"]["cors"]["allowed_methods"]) {
+                cors.allowed_methods.push_back(method.get<std::string>());
+            }
+            for (const auto& header : config["security"]["cors"]["allowed_headers"]) {
+                cors.allowed_headers.push_back(header.get<std::string>());
+            }
+            cors.max_age = config["security"]["cors"]["max_age"].get<int>();
+            cors.allow_credentials = config["security"]["cors"]["allow_credentials"].get<bool>();
+
+            server->setCORS(cors);
+            std::cout << "  ✓ CORS enabled (" << cors.allowed_origins.size() << " origins)\n";
         }
 
         // Enable TLS if configured

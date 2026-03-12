@@ -4,6 +4,7 @@
 #include <memory>
 #include <functional>
 #include <map>
+#include <vector>
 #include <optional>
 #include <httplib.h>
 #include "../auth/JWTManager.h"
@@ -89,6 +90,23 @@ public:
      */
     void setSecurityHeaders(const std::map<std::string, std::string>& headers);
 
+    /**
+     * @brief CORS configuration
+     */
+    struct CORSConfig {
+        bool enabled = false;
+        std::vector<std::string> allowed_origins;
+        std::vector<std::string> allowed_methods;
+        std::vector<std::string> allowed_headers;
+        int max_age = 3600;
+        bool allow_credentials = false;
+    };
+
+    /**
+     * @brief Set CORS configuration
+     */
+    void setCORS(const CORSConfig& cors_config);
+
     struct CachedResponse {
         std::string body;
         std::string content_type;
@@ -122,6 +140,7 @@ private:
     std::string key_file_;
 
     std::map<std::string, std::string> security_headers_;
+    CORSConfig cors_config_;
 
     CacheGetFn cache_get_;
     CacheSetFn cache_set_;
@@ -136,6 +155,16 @@ private:
      * @brief Add security headers to response
      */
     void addSecurityHeaders(httplib::Response& res);
+
+    /**
+     * @brief Add CORS headers to response based on the request Origin
+     */
+    void addCORSHeaders(const httplib::Request& req, httplib::Response& res);
+
+    /**
+     * @brief Check if origin is allowed by CORS config
+     */
+    bool isOriginAllowed(const std::string& origin) const;
 
     /**
      * @brief Main request handler

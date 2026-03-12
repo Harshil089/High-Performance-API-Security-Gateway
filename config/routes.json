@@ -11,8 +11,7 @@
     {
       "path": "/api/users/*",
       "backends": [
-        "http://localhost:3002",
-        "http://localhost:3003"
+        "http://localhost:3002"
       ],
       "load_balancing": "round_robin",
       "timeout": 3000,

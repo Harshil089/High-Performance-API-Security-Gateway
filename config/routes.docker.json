@@ -19,6 +19,14 @@
       "strip_prefix": "/api"
     },
     {
+      "path": "/api/payment/*",
+      "backend": "http://payment-service:3004",
+      "rewrite": "/*",
+      "timeout": 5000,
+      "require_auth": true,
+      "strip_prefix": "/api/payment"
+    },
+    {
       "path": "/health",
       "handler": "health_check",
       "require_auth": false
