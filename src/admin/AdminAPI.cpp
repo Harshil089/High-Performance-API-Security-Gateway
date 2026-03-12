@@ -162,14 +162,18 @@ void AdminAPI::handleClearCache(const httplib::Request& req, httplib::Response& 
             }
         }
 
-        // Note: Cache clearing would be implemented in the main gateway
-        // For now, just return success
-        json response = {
-            {"message", "Cache cleared"},
-            {"pattern", pattern},
-            {"timestamp", std::time(nullptr)}
-        };
-        sendJSON(res, 200, response);
+        if (cache_clear_callback_) {
+            int cleared = cache_clear_callback_(pattern);
+            json response = {
+                {"message", "Cache cleared"},
+                {"pattern", pattern},
+                {"keys_cleared", cleared},
+                {"timestamp", std::time(nullptr)}
+            };
+            sendJSON(res, 200, response);
+        } else {
+            sendError(res, 503, "Cache not available");
+        }
     } catch (const std::exception& e) {
         sendError(res, 400, std::string("Cache clear failed: ") + e.what());
     }

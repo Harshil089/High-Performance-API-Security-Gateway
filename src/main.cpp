@@ -469,7 +469,7 @@ int main(int argc, char* argv[]) {
                         cache_ttl
                     );
 
-                    // Wire cache stats to Admin API
+                    // Wire cache stats and clear to Admin API
                     if (admin_api) {
                         admin_api->setCacheStatsCallback([redis_cache]() -> nlohmann::json {
                             auto stats = redis_cache->getStats();
@@ -478,6 +478,17 @@ int main(int argc, char* argv[]) {
                                 {"memory_usage_bytes", stats.memory_usage},
                                 {"connected", redis_cache->isConnected()}
                             };
+                        });
+
+                        admin_api->setCacheClearCallback([redis_cache](const std::string& pattern) -> int {
+                            auto before = redis_cache->getStats().total_keys;
+                            if (pattern == "*") {
+                                redis_cache->clear();
+                            } else {
+                                redis_cache->invalidatePattern(pattern);
+                            }
+                            auto after = redis_cache->getStats().total_keys;
+                            return static_cast<int>(before - after);
                         });
                     }
 

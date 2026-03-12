@@ -57,6 +57,14 @@ public:
     }
 
     /**
+     * @brief Set cache clear callback
+     */
+    using CacheClearCallback = std::function<int(const std::string& pattern)>;
+    void setCacheClearCallback(CacheClearCallback callback) {
+        cache_clear_callback_ = callback;
+    }
+
+    /**
      * @brief Set rate limit reset callback
      */
     using RateLimitResetCallback = std::function<void(const std::string&)>;
@@ -76,6 +84,7 @@ private:
     nlohmann::json current_config_;
     ConfigUpdateCallback config_update_callback_;
     CacheStatsCallback cache_stats_callback_;
+    CacheClearCallback cache_clear_callback_;
     RateLimitResetCallback rate_limit_reset_callback_;
     std::shared_ptr<Router> router_;
 
