@@ -3,8 +3,10 @@
 #include <string>
 #include <functional>
 #include <map>
+#include <memory>
 #include <httplib.h>
 #include <nlohmann/json.hpp>
+#include "router/Router.h"
 
 namespace gateway {
 
@@ -62,12 +64,20 @@ public:
         rate_limit_reset_callback_ = callback;
     }
 
+    /**
+     * @brief Set router for route management endpoints
+     */
+    void setRouter(std::shared_ptr<Router> router) {
+        router_ = router;
+    }
+
 private:
     std::string admin_token_;
     nlohmann::json current_config_;
     ConfigUpdateCallback config_update_callback_;
     CacheStatsCallback cache_stats_callback_;
     RateLimitResetCallback rate_limit_reset_callback_;
+    std::shared_ptr<Router> router_;
 
     /**
      * @brief Verify admin token
@@ -91,6 +101,8 @@ private:
     void handleClearCache(const httplib::Request& req, httplib::Response& res);
     void handleResetRateLimit(const httplib::Request& req, httplib::Response& res);
     void handleReloadConfig(const httplib::Request& req, httplib::Response& res);
+    void handleGetRoutes(const httplib::Request& req, httplib::Response& res);
+    void handleUpdateRoutes(const httplib::Request& req, httplib::Response& res);
 };
 
 } // namespace gateway

@@ -38,6 +38,16 @@ void AdminAPI::registerEndpoints(httplib::Server& server, const std::string& adm
         handleReloadConfig(req, res);
     });
 
+    // GET /admin/routes - List all routes
+    server.Get("/admin/routes", [this](const httplib::Request& req, httplib::Response& res) {
+        handleGetRoutes(req, res);
+    });
+
+    // POST /admin/routes - Replace all routes
+    server.Post("/admin/routes", [this](const httplib::Request& req, httplib::Response& res) {
+        handleUpdateRoutes(req, res);
+    });
+
     std::cout << "Admin API: Registered admin endpoints at /admin/*" << std::endl;
 }
 
@@ -213,6 +223,59 @@ void AdminAPI::handleReloadConfig(const httplib::Request& req, httplib::Response
         {"status", "pending"}
     };
     sendJSON(res, 501, response);
+}
+
+void AdminAPI::handleGetRoutes(const httplib::Request& req, httplib::Response& res) {
+    if (!verifyAdminToken(req)) {
+        sendError(res, 401, "Unauthorized: Invalid or missing admin token");
+        return;
+    }
+
+    if (!router_) {
+        sendError(res, 503, "Router not available");
+        return;
+    }
+
+    json response = {
+        {"routes", router_->getRoutesJSON()}
+    };
+    sendJSON(res, 200, response);
+}
+
+void AdminAPI::handleUpdateRoutes(const httplib::Request& req, httplib::Response& res) {
+    if (!verifyAdminToken(req)) {
+        sendError(res, 401, "Unauthorized: Invalid or missing admin token");
+        return;
+    }
+
+    if (!router_) {
+        sendError(res, 503, "Router not available");
+        return;
+    }
+
+    try {
+        json body = json::parse(req.body);
+
+        if (!body.contains("routes") || !body["routes"].is_array()) {
+            sendError(res, 400, "Invalid payload: must contain a 'routes' array");
+            return;
+        }
+
+        // Clear existing routes and reload from the submitted JSON
+        router_->clearRoutes();
+        int count = router_->loadRoutes(body.dump());
+
+        json response = {
+            {"message", "Routes updated successfully"},
+            {"routes_loaded", count},
+            {"timestamp", std::time(nullptr)}
+        };
+        sendJSON(res, 200, response);
+    } catch (const json::parse_error& e) {
+        sendError(res, 400, std::string("Invalid JSON: ") + e.what());
+    } catch (const std::exception& e) {
+        sendError(res, 500, std::string("Route update failed: ") + e.what());
+    }
 }
 
 } // namespace gateway

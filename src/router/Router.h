@@ -7,6 +7,7 @@
 #include <optional>
 #include <map>
 #include <set>
+#include <nlohmann/json.hpp>
 
 namespace gateway {
 
@@ -76,6 +77,16 @@ public:
      * @brief Get all unique backend URLs from loaded routes
      */
     std::vector<std::string> getAllBackendUrls() const;
+
+    /**
+     * @brief Get all routes as JSON
+     */
+    nlohmann::json getRoutesJSON() const;
+
+    /**
+     * @brief Clear all loaded routes
+     */
+    void clearRoutes();
 
 private:
     std::vector<Route> routes_;

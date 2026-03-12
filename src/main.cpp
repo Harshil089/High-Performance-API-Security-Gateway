@@ -327,6 +327,8 @@ int main(int argc, char* argv[]) {
                 std::cout << "Admin: Rate limit reset requested for key: " << key << std::endl;
             });
 
+            admin_api->setRouter(router);
+
             std::cout << "  ✓ Admin API enabled at /admin/*\n";
         } else {
             std::cout << "  - Admin API disabled\n";

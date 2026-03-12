@@ -90,6 +90,40 @@ std::vector<std::string> Router::getAllBackendUrls() const {
     return std::vector<std::string>(unique_urls.begin(), unique_urls.end());
 }
 
+json Router::getRoutesJSON() const {
+    json routes_array = json::array();
+    for (const auto& route : routes_) {
+        json r;
+        r["path"] = route.path_pattern;
+        r["timeout"] = route.timeout_ms;
+        r["require_auth"] = route.require_auth;
+
+        if (!route.handler.empty()) {
+            r["handler"] = route.handler;
+        }
+        if (!route.strip_prefix.empty()) {
+            r["strip_prefix"] = route.strip_prefix;
+        }
+        if (!route.load_balancing.empty()) {
+            r["load_balancing"] = route.load_balancing;
+        }
+
+        if (route.backends.size() == 1) {
+            r["backend"] = route.backends[0];
+        } else if (route.backends.size() > 1) {
+            r["backends"] = route.backends;
+        }
+
+        routes_array.push_back(r);
+    }
+    return routes_array;
+}
+
+void Router::clearRoutes() {
+    routes_.clear();
+    backend_indices_.clear();
+}
+
 std::regex Router::patternToRegex(const std::string& pattern) {
     std::string regex_pattern = pattern;
 
