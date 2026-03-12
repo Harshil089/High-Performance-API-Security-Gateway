@@ -121,6 +121,17 @@ public:
         cache_ttl_ = default_ttl;
     }
 
+    /**
+     * @brief Distributed rate limiter callback
+     * Returns (allowed, retry_after_seconds) for a given client_ip + endpoint.
+     */
+    using DistributedRateLimitFn = std::function<std::pair<bool, int>(
+        const std::string& client_ip, const std::string& endpoint)>;
+
+    void setDistributedRateLimiter(DistributedRateLimitFn fn) {
+        distributed_rate_limiter_ = std::move(fn);
+    }
+
 private:
     std::string host_;
     int port_;
@@ -145,6 +156,8 @@ private:
     CacheGetFn cache_get_;
     CacheSetFn cache_set_;
     int cache_ttl_ = 300;
+
+    DistributedRateLimitFn distributed_rate_limiter_;
 
     /**
      * @brief Setup request handlers

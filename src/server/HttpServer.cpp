@@ -313,8 +313,10 @@ void HttpServer::handleRequest(const httplib::Request& req, httplib::Response& r
         return;
     }
 
-    // Check rate limiting
-    auto [allowed, retry_after] = rate_limiter_->allowRequest(client_ip, req.path);
+    // Check rate limiting (prefer distributed/Redis limiter if available)
+    auto [allowed, retry_after] = distributed_rate_limiter_
+        ? distributed_rate_limiter_(client_ip, req.path)
+        : rate_limiter_->allowRequest(client_ip, req.path);
     if (!allowed) {
         metrics_->incrementRateLimitHits();
         res.status = StatusCode::TOO_MANY_REQUESTS;

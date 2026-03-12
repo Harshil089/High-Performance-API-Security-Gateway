@@ -506,6 +506,45 @@ int main(int argc, char* argv[]) {
                 auto redis_rate_limiter = std::make_shared<RedisRateLimiter>(redis_uri, redis_pass);
                 std::cout << "  ✓ Redis Rate Limiter connected\n";
 
+                // Wire distributed rate limiter into the request pipeline
+                // Replicates multi-level checks (global, per-ip, per-endpoint) via Redis
+                auto rl_config = rate_limits; // capture config
+                server->setDistributedRateLimiter(
+                    [redis_rate_limiter, rl_config](const std::string& client_ip,
+                                                    const std::string& endpoint)
+                        -> std::pair<bool, int> {
+                        // Global check
+                        if (rl_config.contains("global")) {
+                            int max_req = rl_config["global"]["requests"].get<int>();
+                            int window  = rl_config["global"]["window"].get<int>();
+                            if (!redis_rate_limiter->allowRequest("global", max_req, window)) {
+                                return {false, window};
+                            }
+                        }
+                        // Per-IP check
+                        if (rl_config.contains("per_ip")) {
+                            int max_req = rl_config["per_ip"]["requests"].get<int>();
+                            int window  = rl_config["per_ip"]["window"].get<int>();
+                            if (!redis_rate_limiter->allowRequest("ip:" + client_ip, max_req, window)) {
+                                return {false, window};
+                            }
+                        }
+                        // Per-endpoint check
+                        if (rl_config.contains("endpoints") && rl_config["endpoints"].is_object()) {
+                            auto it = rl_config["endpoints"].find(endpoint);
+                            if (it != rl_config["endpoints"].end()) {
+                                int max_req = (*it)["requests"].get<int>();
+                                int window  = (*it)["window"].get<int>();
+                                if (!redis_rate_limiter->allowRequest(
+                                        "ep:" + client_ip + ":" + endpoint, max_req, window)) {
+                                    return {false, window};
+                                }
+                            }
+                        }
+                        return {true, 0};
+                    });
+                std::cout << "  ✓ Redis distributed rate limiting wired into request pipeline\n";
+
                 // Wire rate limit reset to Admin API
                 if (admin_api) {
                     admin_api->setRateLimitResetCallback([redis_rate_limiter](const std::string& key) {
