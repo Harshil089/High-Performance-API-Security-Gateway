@@ -83,6 +83,9 @@ bool HttpServer::isOriginAllowed(const std::string& origin) const {
 void HttpServer::addCORSHeaders(const httplib::Request& req, httplib::Response& res) {
     if (!cors_config_.enabled) return;
 
+    // Always set Vary so caches key on Origin regardless of match
+    res.set_header("Vary", "Origin");
+
     std::string origin = req.get_header_value("Origin");
     if (!isOriginAllowed(origin)) return;
 
@@ -92,8 +95,9 @@ void HttpServer::addCORSHeaders(const httplib::Request& req, httplib::Response& 
         res.set_header("Access-Control-Allow-Credentials", "true");
     }
 
-    // Vary header so caches know the response depends on Origin
-    res.set_header("Vary", "Origin");
+    // Expose gateway-specific headers so browsers can read them
+    res.set_header("Access-Control-Expose-Headers",
+                   "X-Request-ID, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset");
 }
 
 void HttpServer::addSecurityHeaders(httplib::Response& res) {
@@ -138,36 +142,55 @@ void HttpServer::setupHandlers() {
         // Add security headers
         addSecurityHeaders(res);
 
-        // CORS preflight
-        if (cors_config_.enabled) {
-            std::string origin = req.get_header_value("Origin");
-            if (isOriginAllowed(origin)) {
-                res.set_header("Access-Control-Allow-Origin", origin);
+        if (!cors_config_.enabled) {
+            res.status = 204;
+            return;
+        }
 
-                // Join allowed methods
-                std::string methods;
-                for (size_t i = 0; i < cors_config_.allowed_methods.size(); i++) {
-                    if (i > 0) methods += ", ";
-                    methods += cors_config_.allowed_methods[i];
-                }
-                res.set_header("Access-Control-Allow-Methods", methods);
+        // Always set Vary so caches key on these headers
+        res.set_header("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
 
-                // Join allowed headers
-                std::string headers;
-                for (size_t i = 0; i < cors_config_.allowed_headers.size(); i++) {
-                    if (i > 0) headers += ", ";
-                    headers += cors_config_.allowed_headers[i];
-                }
-                res.set_header("Access-Control-Allow-Headers", headers);
+        std::string origin = req.get_header_value("Origin");
+        if (!isOriginAllowed(origin)) {
+            res.status = 204;
+            return;
+        }
 
-                res.set_header("Access-Control-Max-Age", std::to_string(cors_config_.max_age));
-
-                if (cors_config_.allow_credentials) {
-                    res.set_header("Access-Control-Allow-Credentials", "true");
-                }
-
-                res.set_header("Vary", "Origin");
+        // Validate requested method is in our allowed list
+        std::string req_method = req.get_header_value("Access-Control-Request-Method");
+        if (!req_method.empty()) {
+            bool method_ok = false;
+            for (const auto& m : cors_config_.allowed_methods) {
+                if (m == req_method) { method_ok = true; break; }
             }
+            if (!method_ok) {
+                res.status = 204;
+                return;
+            }
+        }
+
+        res.set_header("Access-Control-Allow-Origin", origin);
+
+        // Join allowed methods
+        std::string methods;
+        for (size_t i = 0; i < cors_config_.allowed_methods.size(); i++) {
+            if (i > 0) methods += ", ";
+            methods += cors_config_.allowed_methods[i];
+        }
+        res.set_header("Access-Control-Allow-Methods", methods);
+
+        // Join allowed headers
+        std::string headers;
+        for (size_t i = 0; i < cors_config_.allowed_headers.size(); i++) {
+            if (i > 0) headers += ", ";
+            headers += cors_config_.allowed_headers[i];
+        }
+        res.set_header("Access-Control-Allow-Headers", headers);
+
+        res.set_header("Access-Control-Max-Age", std::to_string(cors_config_.max_age));
+
+        if (cors_config_.allow_credentials) {
+            res.set_header("Access-Control-Allow-Credentials", "true");
         }
 
         res.status = 204;
