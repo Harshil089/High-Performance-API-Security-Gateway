@@ -6,6 +6,8 @@
 #include <chrono>
 #include <memory>
 #include <thread>
+#include <atomic>
+#include <condition_variable>
 
 namespace gateway {
 
@@ -117,9 +119,11 @@ private:
     RateLimitConfig per_ip_config_;
     std::map<std::string, RateLimitConfig> endpoint_configs_;
 
-    bool cleanup_running_;
+    std::atomic<bool> cleanup_running_;
     std::thread cleanup_thread_;
     int cleanup_interval_seconds_;
+    std::mutex shutdown_mutex_;
+    std::condition_variable shutdown_cv_;
 
     /**
      * @brief Get or create bucket for key

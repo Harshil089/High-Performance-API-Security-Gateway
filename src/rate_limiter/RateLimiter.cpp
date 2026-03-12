@@ -17,6 +17,7 @@ RateLimiter::RateLimiter(int cleanup_interval_seconds)
 
 RateLimiter::~RateLimiter() {
     cleanup_running_ = false;
+    shutdown_cv_.notify_all();
     if (cleanup_thread_.joinable()) {
         cleanup_thread_.join();
     }
@@ -150,9 +151,16 @@ bool RateLimiter::consumeTokens(TokenBucket& bucket, int tokens) {
 
 void RateLimiter::cleanupOldBuckets() {
     while (cleanup_running_) {
-        std::this_thread::sleep_for(std::chrono::seconds(cleanup_interval_seconds_));
+        {
+            std::unique_lock<std::mutex> shutdown_lock(shutdown_mutex_);
+            shutdown_cv_.wait_for(shutdown_lock, std::chrono::seconds(cleanup_interval_seconds_), [this]() {
+                return !cleanup_running_.load();
+            });
+        }
 
-        std::lock_guard<std::mutex> lock(buckets_mutex_);
+        if (!cleanup_running_) break;
+
+        std::lock_guard<std::mutex> buckets_lock(buckets_mutex_);
 
         auto now = std::chrono::steady_clock::now();
 
